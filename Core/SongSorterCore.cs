@@ -789,11 +789,25 @@ public static class SongSorterCore
         if (!existingFolderName.StartsWith(primaryFolderName, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (existingFolderName.Length <= primaryFolderName.Length)
-            return false;
+        var remaining = existingFolderName[primaryFolderName.Length..];
+        
+        // スペースのみ、または空（既にEqualsでチェック済みだが念のため）
+        if (string.IsNullOrWhiteSpace(remaining)) return true;
 
-        var next = existingFolderName[primaryFolderName.Length];
-        return char.IsWhiteSpace(next) || next == '[' || next == '(' || next == '\uFF3B' || next == '\uFF08';
+        // 続きが " [" で始まる場合は、同じ曲の別TJA版（譜面名など）とみなす
+        if (remaining.StartsWith(" [") || remaining.StartsWith("["))
+            return true;
+            
+        // " (2)" などの枝番の場合は同じ曲とみなす。
+        // ただし、"(Nijisanji)" などのサブタイトルと区別するため、カッコ内が数字で始まる場合のみとする。
+        if (remaining.StartsWith(" (") || remaining.StartsWith("("))
+        {
+            var inside = remaining.TrimStart(' ', '(', '\uFF08');
+            if (inside.Length > 0 && char.IsDigit(inside[0]))
+                return true;
+        }
+
+        return false;
     }
 }
 

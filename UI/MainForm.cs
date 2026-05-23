@@ -57,6 +57,7 @@ public partial class MainForm : Form
         // Save Settings on text change
         txtDanOutputFolder.TextChanged += (s, e) => SaveSettings();
         txtDanConvertOutputFolder.TextChanged += (s, e) => SaveSettings();
+        txtWikiUrl.TextChanged += (s, e) => SaveSettings();
         
         // Operations
         btnFetchLists.Click += async (s, e) => await OnFetchListsClick();
@@ -92,7 +93,6 @@ public partial class MainForm : Form
 
         // If it's the DanConvertor tab or txtTjaFile
         txtTjaFile.Text = string.Join(";", files);
-        SaveSettings();
     }
 
     private void SyncSourceFolders(string value)
@@ -725,12 +725,12 @@ public partial class MainForm : Form
             TempSongs = txtTempSongs.Text,
             TaikoRoot = txtTaikoRoot.Text,
             DanSongsPath = txtDanSongsPath.Text,
-            DanConvertSimu = txtDanConvertSimu.Text,
+            DanConvertSimu = "", // 記憶しない
             WikiUrl = txtWikiUrl.Text,
             DanOutputFolder = txtDanOutputFolder.Text,
             DanConvertOutputFolder = txtDanConvertOutputFolder.Text,
-            WikiFilter = txtWikiFilter.Text,
-            TjaFile = txtTjaFile.Text,
+            WikiFilter = "", // 記憶しない
+            TjaFile = "", // 記憶しない
             SelectedCategoriesCsv = string.Join("|", GetSelectedSourceCategories())
         };
 
@@ -753,13 +753,13 @@ public partial class MainForm : Form
             txtTempSongs.Text = settings.TempSongs ?? "";
             txtTaikoRoot.Text = settings.TaikoRoot ?? "";
             txtDanSongsPath.Text = settings.DanSongsPath ?? "";
-            txtDanConvertSimu.Text = settings.DanConvertSimu ?? "";
-            txtTjaFile.Text = settings.TjaFile ?? "";
+            txtDanConvertSimu.Text = "";
+            txtTjaFile.Text = "";
             
             txtDanOutputFolder.Text = settings.DanOutputFolder ?? "";
             txtDanConvertOutputFolder.Text = settings.DanConvertOutputFolder ?? "";
 
-            txtWikiUrl.Text = "";
+            txtWikiUrl.Text = settings.WikiUrl ?? "";
             txtWikiFilter.Text = "";
 
             _selectedSourceCategories.Clear();

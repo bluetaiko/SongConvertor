@@ -4,10 +4,8 @@ public class DanCourse
 {
     public string title { get; set; } = string.Empty;
     public int danIndex { get; set; }
-    public string danPlatePath { get; set; } = "Plate.png";
-    public string danPanelSidePath { get; set; } = "panelside.png";
-    public string danTitlePlatePath { get; set; } = "titleplate.png";
-    public string danMiniPlatePath { get; set; } = "miniplate.png";
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? danPlatePath { get; set; }
     public List<DanSong> danSongs { get; set; } = new();
     public ConditionGauge conditionGauge { get; set; } = new();
     public List<Condition> conditions { get; set; } = new();

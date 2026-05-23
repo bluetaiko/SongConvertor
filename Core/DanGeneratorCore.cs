@@ -49,27 +49,71 @@ public class DanGeneratorCore
         var doc = new HtmlDoc();
         doc.LoadHtml(html);
 
-        var tables = doc.DocumentNode.SelectNodes("//table");
-        if (tables == null)
+        var nodes = doc.DocumentNode.SelectNodes("//h3 | //h4 | //table");
+        if (nodes == null)
         {
-            logAction?.Invoke("エラー: テーブルが見つかりません。");
+            logAction?.Invoke("エラー: コンテンツが見つかりません。");
             return;
         }
 
         var rankNames = new[] { "五級", "四級", "三級", "二級", "一級", "初段", "二段", "三段", "四段", "五段", "六段", "七段", "八段", "九段", "十段", "玄人", "名人", "超人", "達人" };
         
-        var excludeKeywords = new[] { "合格条件", "お題", "お品書き", "魂ゲージ", "たたけた数", "叩けた数", "総音符数", "ノーツ数", "不可", "連打数", "良", "可", "コンボ", "最低スコア", "スコア", "動画", "計", "楽曲名", "課題曲", "難易度", "難しさ", "むずかしさ", "強さ", "★", "レベル", "概要", "詳細", "備考", "リンク", "プレイ動画", "参照", "初出", "回数", "解放期間", "解放条件" };
+        var excludeKeywords = new[] { "合格条件", "お題", "お品書き", "魂ゲージ", "たたけた数", "叩けた数", "総音符数", "ノーツ数", "不可", "連打数", "良", "可", "コンボ", "最大コンボ数", "スコア", "動画", "計", "楽曲名", "課題曲", "難易度", "難しさ", "むずかしさ", "強さ", "★", "レベル", "概要", "詳細", "備考", "リンク", "プレイ動画", "参照", "初出", "回数", "解放期間", "解放条件" };
 
-        int foundOrder = 0;
         int totalProcessed = 0;
         var missingSongs = new List<string>();
-        var danCoursesList = new List<(DanCourse course, string detectedRank, int rankIdx, HtmlNode row, Dictionary<int, string> colMap)>();
+        var allSets = new List<(string versionName, List<(DanCourse course, string detectedRank, int rankIdx)> courses)>();
+        var currentSet = new List<(DanCourse course, string detectedRank, int rankIdx)>();
+        var seenIndicesInCurrentSet = new HashSet<int>();
 
-        foreach (var table in tables)
+        string currentVersion = "";
+        string currentSection = "";
+        bool isGaiden = inputSource.Contains("外伝") || inputSource.Contains("%E5%A4%96%E4%BC%9D");
+
+        foreach (var node in nodes)
         {
             ct.ThrowIfCancellationRequested();
-            if (table.InnerText.Contains("課題候補曲リスト")) continue;
-            if (!table.InnerText.Contains("1st")) continue;
+
+            if (node.Name == "h3")
+            {
+                string newVersion = HtmlEntity.DeEntitize(node.InnerText.Trim());
+                // バージョンが変わったら現在のセットを保存して新しく始める
+                // 外伝の場合は一つの連番にするため、セットを分けない
+                if (!isGaiden && !string.IsNullOrEmpty(currentVersion) && newVersion != currentVersion && currentSet.Count > 0)
+                {
+                    allSets.Add((currentVersion, currentSet));
+                    currentSet = new List<(DanCourse course, string detectedRank, int rankIdx)>();
+                    seenIndicesInCurrentSet.Clear();
+                }
+                currentVersion = newVersion;
+                continue;
+            }
+            if (node.Name == "h4")
+            {
+                currentSection = HtmlEntity.DeEntitize(node.InnerText.Trim());
+                continue;
+            }
+            if (node.Name != "table") continue;
+
+            var table = node;
+            // 候補曲リスト、中国版、アジア版、変更点などはスキップ
+            // 2020はタイトルに「ASIA」を含むため、除外対象から外すように特別対応
+            bool is2020 = currentVersion.Contains("2020");
+            
+            bool isCandidate = table.InnerText.Contains("課題候補曲リスト") || currentVersion.Contains("候補") || currentSection.Contains("候補");
+            
+            bool isExtraRegion = currentSection.Contains("CHINA") || currentSection.Contains("中国") || currentSection.Contains("アジア") || currentSection.Contains("Asia") || currentSection.Contains("海外") || currentSection.Contains("台湾") || currentSection.Contains("韓国") || currentSection.Contains("版の課題曲") ||
+                                 table.InnerText.Contains("中国版") || table.InnerText.Contains("アジア版") || table.InnerText.Contains("版の課題曲");
+            
+            // 2020セクションの場合は、海外版キーワードによる除外を無効化する（ユーザー要望）
+            if (is2020) isExtraRegion = false;
+
+            bool isChangeLog = currentSection.Contains("変更点") || currentSection.Contains("違い") || currentSection.Contains("差分") || table.InnerText.Contains("変更点");
+
+            if (isCandidate || isExtraRegion || isChangeLog) continue;
+
+            // 段位道場の表であることを確認
+            if (!table.InnerText.Contains("1st") && !table.InnerText.Contains("魂ゲージ") && !table.InnerText.Contains("合格条件")) continue;
 
             var rows = table.SelectNodes(".//tr");
             if (rows == null) continue;
@@ -99,8 +143,14 @@ public class DanGeneratorCore
                 {
                     foreach (var cellText in cellTexts) {
                         if (string.IsNullOrEmpty(cellText) || cellText.Length < 2) continue;
+                        // 段位名らしいキーワードを含んでいるかチェック
+                        bool isRankLike = rankNames.Any(rn => cellText.Contains(rn)) || 
+                                          cellText.Contains("級") || cellText.Contains("段") || 
+                                          cellText.Contains("名人") || cellText.Contains("達人") || cellText.Contains("玄人");
+                        
+                        if (!isRankLike) continue;
                         if (excludeKeywords.Any(k => cellText.Contains(k))) continue;
-                        if (IsDatePattern(cellText)) continue;
+                        if (IsInvalidRankName(cellText)) continue;
                         detectedRank = cellText;
                         break;
                     }
@@ -117,8 +167,36 @@ public class DanGeneratorCore
 
                 try
                 {
-                    int rankIdx = rankNames.ToList().FindIndex(r => detectedRank.Contains(r));
+                    int rankIdx = isGaiden ? 19 : rankNames.ToList().FindIndex(r => detectedRank.Contains(r));
                     var dan = new DanCourse { title = detectedRank, danIndex = rankIdx >= 0 ? rankIdx : 0 };
+                    
+                    // セットの区切り判定
+                    int lastRankIdx = currentSet.Count > 0 ? currentSet.Last().rankIdx : -1;
+                    bool isNewSet = false;
+
+                    if (!isGaiden)
+                    {
+                        if (rankIdx >= 0)
+                        {
+                            // すでに見たランク、または現在より低いランクが現れたら新セットとみなす
+                            if (seenIndicesInCurrentSet.Contains(rankIdx) || (lastRankIdx >= 0 && rankIdx < lastRankIdx))
+                            {
+                                isNewSet = true;
+                            }
+                        }
+                        else if (currentSet.Any(s => s.detectedRank == detectedRank))
+                        {
+                            isNewSet = true;
+                        }
+                    }
+
+                    if (isNewSet && currentSet.Count > 0)
+                    {
+                        allSets.Add((currentVersion, currentSet));
+                        currentSet = new List<(DanCourse course, string detectedRank, int rankIdx)>();
+                        seenIndicesInCurrentSet.Clear();
+                    }
+
                     logAction?.Invoke($"解析中: {detectedRank}");
 
                     var headerCells = row.SelectNodes(".//td");
@@ -143,6 +221,7 @@ public class DanGeneratorCore
                     }
 
                     int songsAdded = 0;
+                    var songRows = new List<HtmlNode>();
                     for (int sIdx = 1; sIdx <= 6; sIdx++) 
                     {
                         if (i + sIdx >= rows.Count) break;
@@ -159,7 +238,7 @@ public class DanGeneratorCore
                         string rowText = sRow.InnerText;
                         if (!rowText.Contains("st") && !rowText.Contains("nd") && !rowText.Contains("rd") && songsAdded >= 3) break;
 
-                        // フォルダ名に使えない文字を削除（_ではなく削除）
+                        // フォルダ名に使えない文字を削除
                         string safeSongTitle = NormalizationUtils.SanitizeFileName(songTitle);
                         
                         string genre = "ナムコオリジナル";
@@ -170,26 +249,26 @@ public class DanGeneratorCore
                         var diffCell = sCells.FirstOrDefault(c => c.InnerText.Contains("★"));
                         if (diffCell != null) diffText = diffCell.InnerText;
                         
-                        // (裏)が含まれているかチェック（元のタイトルでチェック）
                         bool isUra = songTitle.Contains("(裏)") || diffText.Contains("裏") || diffText.Contains("(裏)");
-                        
-                        // pathから(裏)を削除
                         string pathTitle = safeSongTitle.Replace("(裏)", "").Replace("(裏譜面)", "").Trim();
-                        
-                        // 裏譜面の場合はdifficultyを4に、そうでなければDetectDifficultyの結果を使用
                         int difficulty = isUra ? 4 : DetectDifficulty(diffText);
 
                         dan.danSongs.Add(new DanSong { path = $"{pathTitle}.tja", difficulty = difficulty, genre = genre });
+                        songRows.Add(sRow);
                         songsAdded++;
 
-                        if (songsAdded == 1) ParseConditionsFromRow(sRow, colMap, dan);
                         if (songsAdded >= 3) break;
+                    }
+
+                    if (songRows.Count > 0)
+                    {
+                        ParseConditions(songRows, colMap, dan);
                     }
 
                     if (dan.danSongs.Count > 0)
                     {
-                        // データをリストに保存（後でソートして出力）
-                        danCoursesList.Add((dan, detectedRank, rankIdx, row, colMap));
+                        currentSet.Add((dan, detectedRank, rankIdx));
+                        if (rankIdx >= 0) seenIndicesInCurrentSet.Add(rankIdx);
                         lastParsedRankName = detectedRank;
                     }
                 }
@@ -198,48 +277,98 @@ public class DanGeneratorCore
             }
         }
 
-        // ランク順にソート（達人→五級、つまりrankIdxの降順）
-        danCoursesList = danCoursesList.OrderByDescending(d => d.rankIdx).ToList();
+        if (currentSet.Count > 0) allSets.Add((currentVersion, currentSet));
 
-        // ソート済みデータを出力
-        foreach (var item in danCoursesList)
+        // 各セットごとに処理
+        for (int setIdx = 0; setIdx < allSets.Count; setIdx++)
         {
-            ct.ThrowIfCancellationRequested();
-            var dan = item.course;
-            var detectedRank = item.detectedRank;
-            var rankIdx = item.rankIdx;
+            var (versionName, set) = allSets[setIdx];
+            // 外伝の場合はソートせず、ページの上から順番（追加された順）に処理する
+            var sortedSet = isGaiden ? set : set.OrderBy(d => d.rankIdx).ToList();
             
-            string prefix = foundOrder.ToString("D2");
-            string safeRankName = NormalizationUtils.SanitizeFolderName(detectedRank);
-            string rankFolder = Path.Combine(outputDir, $"{prefix} {safeRankName}");
-            if (!Directory.Exists(rankFolder)) Directory.CreateDirectory(rankFolder);
+            string setBaseFolder = outputDir;
+            string danDefTitle = isGaiden ? "外伝段位" : "段位道場";
 
-            if (!string.IsNullOrEmpty(songsFolder) && Directory.Exists(songsFolder))
+            if (allSets.Count > 1)
             {
-                ct.ThrowIfCancellationRequested();
-                var allDirs = Directory.GetDirectories(songsFolder, "*", SearchOption.AllDirectories);
-                foreach (var s in dan.danSongs)
+                string folderName = setIdx.ToString();
+                if (!isGaiden && !string.IsNullOrEmpty(versionName))
                 {
-                    ct.ThrowIfCancellationRequested();
-                    string songNameRaw = Path.GetFileNameWithoutExtension(s.path); 
-                    string songNameForSearch = songNameRaw.Replace("(裏譜面)", "").Replace("(裏)", "").Trim();
-                    string? foundDir = FindDirectoryFuzzy(allDirs, songNameForSearch);
-                    if (foundDir != null)
+                    // 外伝以外（過去バージョン等）は2024, 2023 などの西暦を抽出
+                    var match = Regex.Match(versionName, @"20\d{2}");
+                    if (match.Success)
                     {
-                        foreach (var file in Directory.GetFiles(foundDir))
-                        {
-                            string ext = Path.GetExtension(file).ToLower();
-                            if (ext == ".tja") File.Copy(file, Path.Combine(rankFolder, s.path), true);
-                            else if (ext == ".ogg" || ext == ".mp3") File.Copy(file, Path.Combine(rankFolder, Path.GetFileName(file)), true);
-                        }
+                        folderName = match.Value;
+                        danDefTitle = $"{match.Value}段位";
                     }
-                    else { missingSongs.Add($"[{detectedRank}] {songNameRaw}"); }
+                    else
+                    {
+                        folderName = NormalizationUtils.SanitizeFolderName(versionName);
+                        danDefTitle = $"{folderName}段位";
+                    }
+                }
+                setBaseFolder = Path.Combine(outputDir, folderName);
+            }
+            else
+            {
+                // セットが1つの場合でも、タイトルを抽出する
+                if (isGaiden)
+                {
+                    danDefTitle = "外伝段位";
+                }
+                else if (!string.IsNullOrEmpty(versionName))
+                {
+                    var match = Regex.Match(versionName, @"20\d{2}");
+                    danDefTitle = match.Success ? $"{match.Value}段位" : $"{versionName}段位";
                 }
             }
+            
+            if (!Directory.Exists(setBaseFolder)) Directory.CreateDirectory(setBaseFolder);
 
-            string json = JsonSerializer.Serialize(dan, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
-            await File.WriteAllTextAsync(Path.Combine(rankFolder, "Dan.json"), json, ct);
-            totalProcessed++; foundOrder++;
+            // dan.def の生成
+            string danDefPath = Path.Combine(setBaseFolder, "dan.def");
+            await File.WriteAllTextAsync(danDefPath, $"#TITLE:{danDefTitle}", ct);
+
+            int foundOrder = 0;
+            foreach (var item in sortedSet)
+            {
+                ct.ThrowIfCancellationRequested();
+                var dan = item.course;
+                var detectedRank = item.detectedRank;
+                
+                string prefix = foundOrder.ToString("D2");
+                string safeRankName = NormalizationUtils.SanitizeFolderName(detectedRank);
+                string rankFolder = Path.Combine(setBaseFolder, $"{prefix} {safeRankName}");
+                if (!Directory.Exists(rankFolder)) Directory.CreateDirectory(rankFolder);
+
+                if (!string.IsNullOrEmpty(songsFolder) && Directory.Exists(songsFolder))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var allDirs = Directory.GetDirectories(songsFolder, "*", SearchOption.AllDirectories);
+                    foreach (var s in dan.danSongs)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        string songNameRaw = Path.GetFileNameWithoutExtension(s.path); 
+                        string songNameForSearch = songNameRaw.Replace("(裏譜面)", "").Replace("(裏)", "").Trim();
+                        string? foundDir = FindDirectoryFuzzy(allDirs, songNameForSearch);
+                        if (foundDir != null)
+                        {
+                            foreach (var file in Directory.GetFiles(foundDir))
+                            {
+                                string ext = Path.GetExtension(file).ToLower();
+                                if (ext == ".tja") File.Copy(file, Path.Combine(rankFolder, s.path), true);
+                                else if (ext == ".ogg" || ext == ".mp3") File.Copy(file, Path.Combine(rankFolder, Path.GetFileName(file)), true);
+                            }
+                        }
+                        else { missingSongs.Add($"[{detectedRank}] {songNameRaw}"); }
+                    }
+                }
+
+                string json = JsonSerializer.Serialize(dan, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+                await File.WriteAllTextAsync(Path.Combine(rankFolder, "Dan.json"), json, ct);
+                totalProcessed++; 
+                foundOrder++;
+            }
         }
 
         logAction?.Invoke($"生成完了: {totalProcessed} 件の段位を処理しました。");
@@ -253,7 +382,7 @@ public class DanGeneratorCore
 
     private static string FindRankNameFromRow(HtmlAgilityPack.HtmlNode row, string[] rankNames, string[] excludeKeywords)
     {
-        var potentialNodes = row.SelectNodes(".//strong | .//span[contains(@style, 'font-size:16px')] | .//span[contains(@style, 'font-size:18px')] | .//span[contains(@style, 'font-size:20px')]");
+        var potentialNodes = row.SelectNodes(".//strong | .//b | .//span[contains(@style, 'font-size')] | .//font");
         if (potentialNodes == null) return "";
 
         string bestMatch = "";
@@ -263,7 +392,7 @@ public class DanGeneratorCore
             if (string.IsNullOrEmpty(txt) || txt.Length < 1) continue;
             if (excludeKeywords.Any(k => txt == k)) continue; 
             if (excludeKeywords.Any(k => txt.Contains(k)) && !rankNames.Any(rn => txt.Contains(rn))) continue; 
-            if (IsDatePattern(txt)) continue;
+            if (IsInvalidRankName(txt)) continue;
 
             bestMatch = txt;
             if (rankNames.Any(rn => txt.Contains(rn))) return txt; 
@@ -271,9 +400,19 @@ public class DanGeneratorCore
         return bestMatch;
     }
 
-    private static bool IsDatePattern(string txt)
+    private static bool IsInvalidRankName(string txt)
     {
-        return Regex.IsMatch(txt, @"^\d+[\/\.]\d+") || Regex.IsMatch(txt, @"^\d+[\/\.]\d+[\/\.]\d+") || Regex.IsMatch(txt, @"^[\d\/\.～\-]+$");
+        if (string.IsNullOrWhiteSpace(txt)) return true;
+        // 日付パターン
+        if (Regex.IsMatch(txt, @"^\d+[\/\.]\d+") || Regex.IsMatch(txt, @"^\d+[\/\.]\d+[\/\.]\d+") || Regex.IsMatch(txt, @"^[\d\/\.～\-]+$")) return true;
+        // 閾値パターン (87%以上, 100以上, 10未満, 5以下 など)
+        if (Regex.IsMatch(txt, @"^\d+(%|％)?(以上|以下|未満)$") || Regex.IsMatch(txt, @"^\d+(%|％)$")) return true;
+        if (txt.Contains("以上") || txt.Contains("以下") || txt.Contains("未満")) return true;
+        // その他数値のみ
+        if (Regex.IsMatch(txt, @"^\d+$")) return true;
+        // あまりに長い文字列は段位名ではない
+        if (txt.Length > 50) return true;
+        return false;
     }
 
     private static string? FindDirectoryFuzzy(string[] dirs, string targetName)
@@ -287,37 +426,81 @@ public class DanGeneratorCore
         return null;
     }
 
-    private static void ParseConditionsFromRow(HtmlAgilityPack.HtmlNode row, Dictionary<int, string> colMap, DanCourse dan)
+    private static void ParseConditions(List<HtmlNode> rows, Dictionary<int, string> colMap, DanCourse dan)
     {
-        var cells = row.SelectNodes(".//td");
-        if (cells == null) return;
-        int currentOriginalCol = 0;
-        foreach (var cell in cells)
+        int maxCols = 30; 
+        int[] activeRowSpans = new int[maxCols];
+
+        foreach (var row in rows)
         {
-            int cs = cell.GetAttributeValue("colspan", 1);
-            if (cell.GetAttributeValue("rowspan", "") == "3")
+            var cells = row.SelectNodes(".//td");
+            if (cells == null) continue;
+
+            int cellIdx = 0;
+            for (int col = 0; col < maxCols; col++)
             {
-                if (colMap.TryGetValue(currentOriginalCol, out string? type))
+                if (activeRowSpans[col] > 0)
                 {
-                    var redSpan = cell.SelectSingleNode(".//span[contains(@style, '#f23b08')]") ?? cell.SelectSingleNode(".//span[contains(@style, 'color:red')]");
-                    var goldSpan = cell.SelectSingleNode(".//span[contains(@style, '#e8d03e')]") ?? cell.SelectSingleNode(".//strong");
+                    activeRowSpans[col]--;
+                    continue;
+                }
+
+                if (cellIdx >= cells.Count) break;
+
+                var cell = cells[cellIdx];
+                int cs = cell.GetAttributeValue("colspan", 1);
+                int rs = cell.GetAttributeValue("rowspan", 1);
+
+                if (colMap.TryGetValue(col, out string? type))
+                {
+                    var redSpan = cell.SelectSingleNode(".//span[contains(@style, '#f23b08')]") 
+                               ?? cell.SelectSingleNode(".//span[contains(@style, 'color:red')]")
+                               ?? cell.SelectSingleNode(".//span[contains(@style, 'color:#ff0000')]");
+                               
+                    var goldSpan = cell.SelectSingleNode(".//span[contains(@style, '#e8d03e')]") 
+                                ?? cell.SelectSingleNode(".//strong")
+                                ?? cell.SelectSingleNode(".//span[contains(@style, 'color:#ffff00')]")
+                                ?? cell.SelectSingleNode(".//span[contains(@style, 'color:gold')]");
+                    
                     if (redSpan != null && goldSpan != null)
                     {
                         int redV = ExtractNumber(redSpan.InnerText);
                         int goldV = ExtractNumber(goldSpan.InnerText);
-                        if (type == "Gauge") { dan.conditionGauge.red = redV; dan.conditionGauge.gold = goldV; }
-                        else { dan.conditions.Add(new Condition { type = type, threshold = new List<Threshold> { new Threshold { red = redV, gold = goldV } } }); }
+
+                        if (type == "Gauge")
+                        {
+                            dan.conditionGauge.red = redV;
+                            dan.conditionGauge.gold = goldV;
+                        }
+                        else
+                        {
+                            var cond = dan.conditions.FirstOrDefault(c => c.type == type);
+                            if (cond == null)
+                            {
+                                cond = new Condition { type = type };
+                                dan.conditions.Add(cond);
+                            }
+                            cond.threshold.Add(new Threshold { red = redV, gold = goldV });
+                        }
                     }
                 }
+
+                for (int i = 0; i < cs; i++)
+                {
+                    if (col + i < maxCols)
+                        activeRowSpans[col + i] = rs - 1;
+                }
+
+                cellIdx++;
+                col += cs - 1;
             }
-            currentOriginalCol += cs;
         }
     }
 
     private static int ExtractNumber(string text)
     {
         if (string.IsNullOrEmpty(text)) return 0;
-        var match = Regex.Match(text, @"\d+");
+        var match = Regex.Match(text.Replace(",", ""), @"\d+");
         return match.Success ? int.Parse(match.Value) : 0;
     }
 

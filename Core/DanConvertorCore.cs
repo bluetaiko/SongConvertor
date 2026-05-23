@@ -33,7 +33,7 @@ public class DanConvertorCore
         string? courseTitle = globalMeta.GetValueOrDefault("TITLE") ?? tjaFileName;
         logAction?.Invoke($"分割優先変換を開始: {courseTitle} -> {outputDir}");
 
-        var danJson = new DanJson { title = courseTitle, danIndex = 18 };
+        var danJson = new DanJson { title = courseTitle, danIndex = 19 };
         foreach (var line in lines)
         {
             if (line.StartsWith("#NEXTSONG", StringComparison.OrdinalIgnoreCase)) break;
@@ -100,10 +100,11 @@ public class DanConvertorCore
                 logAction?.Invoke($"  警告: 音源が見つかりませんでした (要確認): {section.Title}");
             }
 
-            string danPlateFallback = Path.Combine(localDir, "Dan_Plate.png");
-            if (File.Exists(danPlateFallback))
+            string danPlateSource = Path.Combine(localDir, "Dan_Plate.png");
+            if (File.Exists(danPlateSource))
             {
-                File.Copy(danPlateFallback, Path.Combine(outputDir, "Plate.png"), true);
+                File.Copy(danPlateSource, Path.Combine(outputDir, "Dan_Plate.png"), true);
+                danJson.danPlatePath = "Dan_Plate.png";
             }
 
             finalSongs.Add(new DanSong { path = targetTjaName, genre = section.Genre, difficulty = 3 });
@@ -270,10 +271,8 @@ public class DanConvertorCore
     {
         public string title { get; set; } = "";
         public int danIndex { get; set; } = 0;
-        public string danPlatePath { get; set; } = "Plate.png";
-        public string danPanelSidePath { get; set; } = "panelside.png";
-        public string danTitlePlatePath { get; set; } = "titleplate.png";
-        public string danMiniPlatePath { get; set; } = "miniplate.png";
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? danPlatePath { get; set; }
         public DanSong[] danSongs { get; set; } = Array.Empty<DanSong>();
         public ConditionGauge? conditionGauge { get; set; }
         public List<Condition> conditions { get; set; } = new();
