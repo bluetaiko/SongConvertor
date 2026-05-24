@@ -318,7 +318,7 @@ public class DanConvertorCore
         public string path { get; set; } = "";
         public int difficulty { get; set; } = 3;
         public string genre { get; set; } = "";
-        public bool isHidden { get; set; } = true;
+        public bool isHidden { get; set; } = false;
         public List<Condition>? conditions { get; set; }
     }
 

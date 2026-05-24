@@ -16,7 +16,7 @@ public class DanSong
     public string path { get; set; } = string.Empty;
     public int difficulty { get; set; }
     public string genre { get; set; } = string.Empty;
-    public bool isHidden { get; set; } = true;
+    public bool isHidden { get; set; } = false;
 }
 
 public class ConditionGauge

@@ -32,7 +32,7 @@ public class DanGeneratorCore
         if (nodes == null) return new List<string>();
 
         var rankNames = new[] { "五級", "四級", "三級", "二級", "一級", "初段", "二段", "三段", "四段", "五段", "六段", "七段", "八段", "九段", "十段", "玄人", "名人", "超人", "達人" };
-        var excludeKeywords = new[] { "合格条件", "お題", "お品書き", "魂ゲージ", "たたけた数", "叩けた数", "総音符数", "ノーツ数", "不可", "連打数", "良", "可", "コンボ", "最大コンボ数", "スコア", "動画", "計", "楽曲名", "課題曲", "難易度", "難しさ", "むずかしさ", "強さ", "★", "レベル", "概要", "詳細", "備考", "リンク", "プレイ動画", "参照", "初出", "回数", "解放期間", "解放条件" };
+        var excludeKeywords = new[] { "合格条件", "お題", "お品書き", "魂ゲージ", "たたけた数", "叩けた数", "総音符数", "ノーツ数", "不可", "連打数", "良", "可", "コンボ", "最大コンボ数", "スコア", "動画", "計", "楽曲名", "課題曲", "難易度", "難しさ", "むずかしさ", "強さ", "★", "レベル", "概要", "詳細", "備考", "リンク", "プレイ動画", "参照", "初出", "回数", "解放期間", "解放条件", "QRコード", "QR", "公式サイト" };
 
         var detectedRanks = new List<string>();
         string currentVersion = "";
@@ -150,7 +150,7 @@ public class DanGeneratorCore
 
         var rankNames = new[] { "五級", "四級", "三級", "二級", "一級", "初段", "二段", "三段", "四段", "五段", "六段", "七段", "八段", "九段", "十段", "玄人", "名人", "超人", "達人" };
         
-        var excludeKeywords = new[] { "合格条件", "お題", "お品書き", "魂ゲージ", "たたけた数", "叩けた数", "総音符数", "ノーツ数", "不可", "連打数", "良", "可", "コンボ", "最大コンボ数", "スコア", "動画", "計", "楽曲名", "課題曲", "難易度", "難しさ", "むずかしさ", "強さ", "★", "レベル", "概要", "詳細", "備考", "リンク", "プレイ動画", "参照", "初出", "回数", "解放期間", "解放条件" };
+        var excludeKeywords = new[] { "合格条件", "お題", "お品書き", "魂ゲージ", "たたけた数", "叩けた数", "総音符数", "ノーツ数", "不可", "連打数", "良", "可", "コンボ", "最大コンボ数", "スコア", "動画", "計", "楽曲名", "課題曲", "難易度", "難しさ", "むずかしさ", "強さ", "★", "レベル", "概要", "詳細", "備考", "リンク", "プレイ動画", "参照", "初出", "回数", "解放期間", "解放条件", "QRコード", "QR", "公式サイト" };
 
         int totalProcessed = 0;
         var missingSongs = new List<string>();
@@ -293,45 +293,96 @@ public class DanGeneratorCore
 
                     var headerCells = row.SelectNodes(".//td");
                     var colMap = new Dictionary<int, string>();
+                    int headerSongCol = -1;
                     if (headerCells != null)
                     {
                         int colOffset = 0;
-                        foreach (var hc in headerCells)
+                        for (int hIdx = 0; hIdx < headerCells.Count; hIdx++)
                         {
+                            var hc = headerCells[hIdx];
                             string txt = HtmlEntity.DeEntitize(hc.InnerText.Trim());
                             int cs = hc.GetAttributeValue("colspan", 1);
-                            if (txt.Contains("魂ゲージ")) colMap[colOffset] = "Gauge";
-                            else if (txt.Contains("不可")) colMap[colOffset] = "Miss";
-                            else if (txt.Contains("良")) colMap[colOffset] = "Great";
-                            else if (txt.Contains("可")) colMap[colOffset] = "Good";
-                            else if (txt.Contains("連打数")) colMap[colOffset] = "Roll";
-                            else if (txt.Contains("たたけた数") || txt.Contains("叩けた数")) colMap[colOffset] = "HitCount";
-                            else if (txt.Contains("コンボ") || txt.Contains("最大コンボ数")) colMap[colOffset] = "MaxCombo";
-                            else if (txt.Contains("最低スコア") || txt.Contains("スコア")) colMap[colOffset] = "Score";
+                            
+                            if (headerSongCol == -1 && !string.IsNullOrEmpty(detectedRank) && txt.Contains(detectedRank) && cs >= 3)
+                            {
+                                headerSongCol = colOffset + cs - 1;
+                            }
+
+                            // 「課題曲」列の特定をより厳密に
+                            if (headerSongCol == -1 && (txt == "課題曲" || txt == "楽曲名" || txt == "曲名" || txt.Contains("課題曲")))
+                            {
+                                headerSongCol = colOffset;
+                            }
+                            
+                            string? type = null;
+                            if (txt.Contains("魂ゲージ")) type = "Gauge";
+                            else if (txt.Contains("不可")) type = "Miss";
+                            else if (txt.Contains("良")) type = "Great";
+                            else if (txt.Contains("可")) type = "Good";
+                            else if (txt.Contains("連打数")) type = "Roll";
+                            else if (txt.Contains("たたけた数") || txt.Contains("叩けた数")) type = "HitCount";
+                            else if (txt.Contains("コンボ") || txt.Contains("最大コンボ数")) type = "MaxCombo";
+                            else if (txt.Contains("最低スコア") || txt.Contains("スコア")) type = "Score";
+
+                            if (type != null)
+                            {
+                                for (int k = 0; k < cs; k++) colMap[colOffset + k] = type;
+                            }
                             colOffset += cs;
                         }
                     }
 
+                    // 課題曲列が見つからない場合のフォールバック（リンクがある列を探す）
+                    if (headerSongCol == -1 && headerCells != null) {
+                        int colOffset = 0;
+                        foreach (var hc in headerCells) {
+                            if (hc.SelectSingleNode(".//a") != null) { headerSongCol = colOffset; break; }
+                            colOffset += hc.GetAttributeValue("colspan", 1);
+                        }
+                    }
+                    if (headerSongCol == -1) headerSongCol = 0;
+
+                    // 相対的な colMap を作成 (課題曲列を 0 とする)
+                    var relativeColMap = new Dictionary<int, string>();
+                    foreach (var kvp in colMap) {
+                        relativeColMap[kvp.Key - headerSongCol] = kvp.Value;
+                    }
+
                     int songsAdded = 0;
                     var songRows = new List<HtmlNode>();
-                    for (int sIdx = 1; sIdx <= 6; sIdx++) 
+                    
+                    // 曲の行を収集し、それぞれの行で曲名の列を特定する
+                    for (int sIdx = 1; sIdx <= 8; sIdx++) 
                     {
                         if (i + sIdx >= rows.Count) break;
                         var sRow = rows[i + sIdx];
                         var sCells = sRow.SelectNodes(".//td");
-                        if (sCells == null || sCells.Count < 2) continue;
-                        if (sCells.Any(c => c.InnerText.Contains("魂ゲージ") || c.InnerText.Contains("合格条件"))) break;
+                        if (sCells == null || sCells.Count < 1) continue;
+                        if (sIdx > 0 && sCells.Any(c => c.InnerText.Contains("魂ゲージ") || c.InnerText.Contains("合格条件"))) break;
+                        if (!IsSongRow(sCells)) continue;
 
-                        var a = sRow.SelectSingleNode(".//a");
-                        if (a == null) continue;
-                        string songTitle = HtmlEntity.DeEntitize(a.InnerText.Trim());
-                        if (excludeKeywords.Contains(songTitle)) continue;
+                        var links = sRow.SelectNodes(".//a");
+                        if (links == null) continue;
 
-                        string rowText = sRow.InnerText;
-                        if (!rowText.Contains("st") && !rowText.Contains("nd") && !rowText.Contains("rd") && songsAdded >= 3) break;
+                        // 最も曲名らしいリンクを持つセルを探す
+                        HtmlNode? bestSongCell = null;
+                        string bestSongTitle = "";
+                        foreach (var link in links)
+                        {
+                            string t = HtmlEntity.DeEntitize(link.InnerText.Trim());
+                            if (string.IsNullOrEmpty(t) || excludeKeywords.Contains(t) || t.Length < 2) continue;
+                            if (t.Length > bestSongTitle.Length)
+                            {
+                                bestSongTitle = t;
+                                bestSongCell = link.ParentNode;
+                                while (bestSongCell != null && bestSongCell.Name != "td") bestSongCell = bestSongCell.ParentNode;
+                            }
+                        }
+
+                        if (bestSongCell == null) continue;
 
                         // フォルダ名に使えない文字を削除
-                        string safeSongTitle = NormalizationUtils.SanitizeFileName(songTitle);
+                        string safeSongTitle = NormalizationUtils.SanitizeFileName(bestSongTitle);
                         
                         string genre = "ナムコオリジナル";
                         var colorCell = sRow.SelectSingleNode(".//td[contains(@style, 'background-color:#')]");
@@ -341,11 +392,11 @@ public class DanGeneratorCore
                         var diffCell = sCells.FirstOrDefault(c => c.InnerText.Contains("★"));
                         if (diffCell != null) diffText = diffCell.InnerText;
                         
-                        bool isUra = songTitle.Contains("(裏)") || diffText.Contains("裏") || diffText.Contains("(裏)");
+                        bool isUra = bestSongTitle.Contains("(裏)") || diffText.Contains("裏") || diffText.Contains("(裏)");
                         string pathTitle = safeSongTitle.Replace("(裏)", "").Replace("(裏譜面)", "").Trim();
                         int difficulty = isUra ? 4 : DetectDifficulty(diffText);
 
-                        dan.danSongs.Add(new DanSong { path = $"{pathTitle}.tja", difficulty = difficulty, genre = genre });
+                        dan.danSongs.Add(new DanSong { path = $"{pathTitle}.tja", difficulty = difficulty, genre = genre, isHidden = false });
                         songRows.Add(sRow);
                         songsAdded++;
 
@@ -354,7 +405,7 @@ public class DanGeneratorCore
 
                     if (songRows.Count > 0)
                     {
-                        ParseConditions(songRows, colMap, dan);
+                        ParseConditions(songRows, relativeColMap, dan, excludeKeywords);
                     }
 
                     if (dan.danSongs.Count > 0)
@@ -541,7 +592,16 @@ public class DanGeneratorCore
         return null;
     }
 
-    private static void ParseConditions(List<HtmlNode> rows, Dictionary<int, string> colMap, DanCourse dan)
+    private static bool IsSongRow(HtmlNodeCollection cells)
+    {
+        return cells.Any(c =>
+        {
+            string text = HtmlEntity.DeEntitize(c.InnerText.Trim());
+            return text is "1st" or "2nd" or "3rd";
+        });
+    }
+
+    private static void ParseConditions(List<HtmlNode> rows, Dictionary<int, string> relativeColMap, DanCourse dan, string[] excludeKeywords)
     {
         int maxCols = 30; 
         int[] activeRowSpans = new int[maxCols];
@@ -551,7 +611,12 @@ public class DanGeneratorCore
             var cells = row.SelectNodes(".//td");
             if (cells == null) continue;
 
-            int cellIdx = 0;
+            // この行の曲タイトルの列を探す (リンクテキストが最も長いものを曲名とみなす)
+            int currentSongCol = -1;
+            int bestTitleLen = -1;
+            int tempIdx = 0;
+            var absoluteCells = new Dictionary<int, HtmlNode>();
+            
             for (int col = 0; col < maxCols; col++)
             {
                 if (activeRowSpans[col] > 0)
@@ -559,29 +624,49 @@ public class DanGeneratorCore
                     activeRowSpans[col]--;
                     continue;
                 }
-
-                if (cellIdx >= cells.Count) break;
-
-                var cell = cells[cellIdx];
+                if (tempIdx >= cells.Count) break;
+                var cell = cells[tempIdx];
                 int cs = cell.GetAttributeValue("colspan", 1);
                 int rs = cell.GetAttributeValue("rowspan", 1);
-
-                if (colMap.TryGetValue(col, out string? type))
+                
+                absoluteCells[col] = cell;
+                
+                var links = cell.SelectNodes(".//a");
+                if (links != null)
                 {
-                    var redSpan = cell.SelectSingleNode(".//span[contains(@style, '#f23b08')]") 
-                               ?? cell.SelectSingleNode(".//span[contains(@style, 'color:red')]")
-                               ?? cell.SelectSingleNode(".//span[contains(@style, 'color:#ff0000')]");
-                               
-                    var goldSpan = cell.SelectSingleNode(".//span[contains(@style, '#e8d03e')]") 
-                                ?? cell.SelectSingleNode(".//strong")
-                                ?? cell.SelectSingleNode(".//span[contains(@style, 'color:#ffff00')]")
-                                ?? cell.SelectSingleNode(".//span[contains(@style, 'color:gold')]");
-                    
-                    if (redSpan != null && goldSpan != null)
+                    foreach (var link in links)
                     {
-                        int redV = ExtractNumber(redSpan.InnerText);
-                        int goldV = ExtractNumber(goldSpan.InnerText);
+                        string t = HtmlEntity.DeEntitize(link.InnerText.Trim());
+                        if (!string.IsNullOrEmpty(t) && !excludeKeywords.Contains(t) && t.Length > bestTitleLen)
+                        {                            bestTitleLen = t.Length;
+                            currentSongCol = col;
+                        }
+                    }
+                }
 
+                for (int i = 0; i < cs; i++) {
+                    if (col + i < maxCols) activeRowSpans[col + i] = rs - 1;
+                }
+                tempIdx++;
+                col += cs - 1;
+            }
+
+            if (currentSongCol == -1) continue;
+
+            foreach (var kvp in absoluteCells)
+            {                int col = kvp.Key;
+                var cell = kvp.Value;
+                int relativeIdx = col - currentSongCol;
+
+                if (relativeColMap.TryGetValue(relativeIdx, out string? type))
+                {
+                    // ヘッダーテキスト自体をパースしないように、数字が含まれているかチェック
+                    if (!Regex.IsMatch(cell.InnerText, @"\d")) continue;
+
+                    var (redV, goldV) = ExtractRedGold(cell, type);
+                    
+                    if (redV > 0 || goldV > 0)
+                    {
                         if (type == "Gauge")
                         {
                             dan.conditionGauge.red = redV;
@@ -599,17 +684,67 @@ public class DanGeneratorCore
                         }
                     }
                 }
-
-                for (int i = 0; i < cs; i++)
-                {
-                    if (col + i < maxCols)
-                        activeRowSpans[col + i] = rs - 1;
-                }
-
-                cellIdx++;
-                col += cs - 1;
             }
         }
+    }
+
+    private static (int red, int gold) ExtractRedGold(HtmlNode cell, string type)
+    {
+        int red = 0;
+        int gold = 0;
+
+        // Try to find spans with specific colors
+        var redNode = cell.SelectSingleNode(".//span[contains(@style, '#f23b08') or contains(@style, 'color:red') or contains(@style, 'color:#ff0000')]");
+        var goldNode = cell.SelectSingleNode(".//span[contains(@style, '#e8d03e') or contains(@style, 'color:gold') or contains(@style, 'color:#ffff00')]")
+                    ?? cell.SelectSingleNode(".//strong");
+
+        if (redNode != null) red = ExtractNumber(redNode.InnerText);
+        if (goldNode != null) gold = ExtractNumber(goldNode.InnerText);
+
+        // Fallback: if only one value found or no spans found
+        if (red == 0 || gold == 0)
+        {
+            // "99%以上(金は100以上)" などのケースに対応するため、テキストを分割して抽出
+            string text = cell.InnerText;
+            var matches = Regex.Matches(text.Replace(",", ""), @"\d+");
+            
+            if (matches.Count >= 2)
+            {
+                if (red == 0) red = int.Parse(matches[0].Value);
+                if (gold == 0) gold = int.Parse(matches[1].Value);
+            }
+            else if (matches.Count == 1)
+            {
+                int val = int.Parse(matches[0].Value);
+                if (red == 0) red = val;
+                else if (gold == 0) gold = val;
+            }
+        }
+        
+        // Miss(不可)の場合は、小さい数値が gold であるべき
+        if (type == "Miss" || type == "MissCount")
+        {
+            if (red > 0 && gold > 0 && red < gold)
+            {
+                // 入れ替え
+                int temp = red;
+                red = gold;
+                gold = temp;
+            }
+        }
+        else
+        {
+            // それ以外（良、ゲージなど）は大きい数値が gold
+            if (red > 0 && gold > 0 && gold < red)
+            {
+                // 入れ替え
+                int temp = red;
+                red = gold;
+                gold = temp;
+            }
+        }
+        
+        return (red, gold);
     }
 
     private static int ExtractNumber(string text)
