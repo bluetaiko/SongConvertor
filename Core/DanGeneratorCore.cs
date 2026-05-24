@@ -11,7 +11,99 @@ public class DanGeneratorCore
 {
     private static readonly HttpClient httpClient = new HttpClient();
 
-    public static async Task GenerateAsync(string inputSource, string outputDir, string songsFolder = "", string filter = "", Action<string>? logAction = null, CancellationToken ct = default)
+    public static async Task<List<string>> FetchRankNamesAsync(string inputSource, CancellationToken ct = default)
+    {
+        string html;
+        if (inputSource.StartsWith("http"))
+        {
+            var response = await httpClient.GetAsync(inputSource, ct);
+            response.EnsureSuccessStatusCode();
+            html = await response.Content.ReadAsStringAsync(ct);
+        }
+        else
+        {
+            if (!File.Exists(inputSource)) return new List<string>();
+            html = await File.ReadAllTextAsync(inputSource, ct);
+        }
+
+        var doc = new HtmlDoc();
+        doc.LoadHtml(html);
+        var nodes = doc.DocumentNode.SelectNodes("//h3 | //h4 | //table");
+        if (nodes == null) return new List<string>();
+
+        var rankNames = new[] { "五級", "四級", "三級", "二級", "一級", "初段", "二段", "三段", "四段", "五段", "六段", "七段", "八段", "九段", "十段", "玄人", "名人", "超人", "達人" };
+        var excludeKeywords = new[] { "合格条件", "お題", "お品書き", "魂ゲージ", "たたけた数", "叩けた数", "総音符数", "ノーツ数", "不可", "連打数", "良", "可", "コンボ", "最大コンボ数", "スコア", "動画", "計", "楽曲名", "課題曲", "難易度", "難しさ", "むずかしさ", "強さ", "★", "レベル", "概要", "詳細", "備考", "リンク", "プレイ動画", "参照", "初出", "回数", "解放期間", "解放条件" };
+
+        var detectedRanks = new List<string>();
+        string currentVersion = "";
+        string currentSection = "";
+
+        foreach (var node in nodes)
+        {
+            if (node.Name == "h3")
+            {
+                currentVersion = HtmlEntity.DeEntitize(node.InnerText.Trim());
+                continue;
+            }
+            if (node.Name == "h4")
+            {
+                currentSection = HtmlEntity.DeEntitize(node.InnerText.Trim());
+                continue;
+            }
+            if (node.Name != "table") continue;
+
+            // GenerateAsyncと同じ除外ロジックを適用
+            bool is2020 = currentVersion.Contains("2020");
+            bool isCandidate = node.InnerText.Contains("課題候補曲リスト") || currentVersion.Contains("候補") || currentSection.Contains("候補");
+            bool isExtraRegion = currentSection.Contains("CHINA") || currentSection.Contains("中国") || currentSection.Contains("アジア") || currentSection.Contains("Asia") || currentSection.Contains("海外") || currentSection.Contains("台湾") || currentSection.Contains("韓国") || currentSection.Contains("版の課題曲") ||
+                                 node.InnerText.Contains("中国版") || node.InnerText.Contains("アジア版") || node.InnerText.Contains("版の課題曲");
+            if (is2020) isExtraRegion = false;
+            bool isChangeLog = currentSection.Contains("変更点") || currentSection.Contains("違い") || currentSection.Contains("差分") || node.InnerText.Contains("変更点");
+
+            if (isCandidate || isExtraRegion || isChangeLog) continue;
+            if (!node.InnerText.Contains("1st") && !node.InnerText.Contains("魂ゲージ") && !node.InnerText.Contains("合格条件")) continue;
+
+            var rows = node.SelectNodes(".//tr");
+            if (rows == null) continue;
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                var cellNodes = row.SelectNodes(".//td");
+                if (cellNodes == null) continue;
+                var cellTexts = cellNodes.Select(c => HtmlEntity.DeEntitize(c.InnerText.Trim())).ToList();
+                if (!cellTexts.Any(t => t.Contains("魂ゲージ") || t.Contains("合格条件") || t.Contains("可") || t.Contains("不可") || t.Contains("叩けた数"))) continue;
+
+                string rank = FindRankNameFromRow(row, rankNames, excludeKeywords);
+                if (string.IsNullOrEmpty(rank) && i > 0) rank = FindRankNameFromRow(rows[i - 1], rankNames, excludeKeywords);
+                
+                if (string.IsNullOrEmpty(rank) && cellTexts.Count > 0)
+                {
+                    foreach (var cellText in cellTexts) {
+                        if (string.IsNullOrEmpty(cellText) || cellText.Length < 2) continue;
+                        bool isRankLike = rankNames.Any(rn => cellText.Contains(rn)) || 
+                                          cellText.Contains("級") || cellText.Contains("段") || 
+                                          cellText.Contains("名人") || cellText.Contains("達人") || cellText.Contains("玄人");
+                        if (!isRankLike) continue;
+                        if (excludeKeywords.Any(k => cellText.Contains(k))) continue;
+                        if (IsInvalidRankName(cellText)) continue;
+                        rank = cellText;
+                        break;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(rank))
+                {
+                    rank = rank.Replace("(裏)", "").Replace("(おに)", "").Replace("(おに裏)", "").Trim();
+                    rank = Regex.Replace(rank, @"^[（(]裏[）)]$","").Trim();
+                    if (!detectedRanks.Contains(rank)) detectedRanks.Add(rank);
+                }
+            }
+        }
+        return detectedRanks;
+    }
+
+    public static async Task GenerateAsync(string inputSource, string outputDir, string songsFolder = "", string filter = "", Action<string>? logAction = null, Dictionary<string, string>? plateMap = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         if (!Directory.Exists(outputDir)) Directory.CreateDirectory(outputDir);
@@ -340,6 +432,29 @@ public class DanGeneratorCore
                 string safeRankName = NormalizationUtils.SanitizeFolderName(detectedRank);
                 string rankFolder = Path.Combine(setBaseFolder, $"{prefix} {safeRankName}");
                 if (!Directory.Exists(rankFolder)) Directory.CreateDirectory(rankFolder);
+
+                // Plate画像のコピー処理
+                string? chosenPlatePath = null;
+                if (plateMap != null)
+                {
+                    if (plateMap.TryGetValue(detectedRank, out var p) && File.Exists(p)) chosenPlatePath = p;
+                    else if (plateMap.TryGetValue("*", out var def) && File.Exists(def)) chosenPlatePath = def;
+                }
+
+                if (chosenPlatePath != null)
+                {
+                    File.Copy(chosenPlatePath, Path.Combine(rankFolder, "Plate.png"), true);
+                    dan.danPlatePath = "Plate.png";
+                }
+                else if (!string.IsNullOrEmpty(songsFolder) && Directory.Exists(songsFolder))
+                {
+                    string danPlateSource = Path.Combine(songsFolder, "Dan_Plate.png");
+                    if (File.Exists(danPlateSource))
+                    {
+                        File.Copy(danPlateSource, Path.Combine(rankFolder, "Plate.png"), true);
+                        dan.danPlatePath = "Plate.png";
+                    }
+                }
 
                 if (!string.IsNullOrEmpty(songsFolder) && Directory.Exists(songsFolder))
                 {

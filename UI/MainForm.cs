@@ -22,6 +22,8 @@ public partial class MainForm : Form
 
     private readonly HashSet<string> _selectedSourceCategories = new(SongSorterCore.SourceCategories, StringComparer.OrdinalIgnoreCase);
     private Button? _btnCategorySelect;
+    private Button? _btnPlateSelect;
+    private readonly Dictionary<string, string> _plateAssignments = new(StringComparer.OrdinalIgnoreCase);
     private ToolStripStatusLabel? _cancelStatusLink;
     private CancellationTokenSource? _operationCts;
 
@@ -57,7 +59,11 @@ public partial class MainForm : Form
         // Save Settings on text change
         txtDanOutputFolder.TextChanged += (s, e) => SaveSettings();
         txtDanConvertOutputFolder.TextChanged += (s, e) => SaveSettings();
-        txtWikiUrl.TextChanged += (s, e) => SaveSettings();
+        txtWikiUrl.TextChanged += (s, e) =>
+        {
+            _plateAssignments.Clear();
+            SaveSettings();
+        };
         
         // Operations
         btnFetchLists.Click += async (s, e) => await OnFetchListsClick();
@@ -73,6 +79,7 @@ public partial class MainForm : Form
         txtTjaFile.DragDrop += Control_DragDrop;
 
         InitializeCategorySelectorUi();
+        InitializePlateSelectorUi();
         InitializeCancelUi();
         UpdateCategoryButtonText();
     }
@@ -188,6 +195,119 @@ public partial class MainForm : Form
             }
         };
         tabSongSorter.Controls.Add(_btnCategorySelect);
+    }
+
+    private void InitializePlateSelectorUi()
+    {
+        _btnPlateSelect = new Button
+        {
+            Name = "btnPlateSelect",
+            Text = "Plate画像選択",
+            Size = btnGenerateDan.Size,
+            Location = new Point(btnGenerateDan.Right + 10, btnGenerateDan.Top),
+            BackColor = Color.FromArgb(80, 80, 80),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = btnGenerateDan.Font
+        };
+        _btnPlateSelect.Click += async (s, e) => await ShowPlateSelectionDialog();
+        tabDanGenerator.Controls.Add(_btnPlateSelect);
+    }
+
+    private async Task ShowPlateSelectionDialog()
+    {
+        if (string.IsNullOrWhiteSpace(txtWikiUrl.Text))
+        {
+            MessageBox.Show("先にWiki URLを入力してください。", "通知", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        SetIndeterminateProgress(true);
+        SetActionButtonsEnabled(false);
+        try
+        {
+            var ranks = await DanGeneratorCore.FetchRankNamesAsync(txtWikiUrl.Text);
+            if (ranks.Count == 0)
+            {
+                MessageBox.Show("段位名が見つかりませんでした。URLを確認してください。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var dialog = new Form
+            {
+                Text = "Plate画像個別設定",
+                StartPosition = FormStartPosition.CenterParent,
+                ClientSize = new Size(600, 500),
+                FormBorderStyle = FormBorderStyle.Sizable,
+                MinimizeBox = false
+            };
+
+            var panel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                Padding = new Padding(10)
+            };
+
+            // 全体設定用の行
+            panel.Controls.Add(CreatePlateRow("*", "【すべての段位に適用】", _plateAssignments.GetValueOrDefault("*")));
+
+            foreach (var rank in ranks)
+            {
+                panel.Controls.Add(CreatePlateRow(rank, rank, _plateAssignments.GetValueOrDefault(rank)));
+            }
+
+            var btnOk = new Button { Text = "保存", Dock = DockStyle.Bottom, Height = 40, DialogResult = DialogResult.OK };
+            dialog.Controls.Add(panel);
+            dialog.Controls.Add(btnOk);
+
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                foreach (Control control in panel.Controls)
+                {
+                    if (control is Panel row && row.Tag is string rName)
+                    {
+                        var txt = row.Controls.OfType<TextBox>().FirstOrDefault();
+                        if (txt != null && !string.IsNullOrWhiteSpace(txt.Text))
+                        {
+                            _plateAssignments[rName] = txt.Text;
+                        }
+                        else
+                        {
+                            _plateAssignments.Remove(rName);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"解析エラー: {ex.Message}");
+        }
+        finally
+        {
+            SetIndeterminateProgress(false);
+            SetActionButtonsEnabled(true);
+        }
+    }
+
+    private Panel CreatePlateRow(string rankKey, string displayName, string? currentPath)
+    {
+        var row = new Panel { Width = 550, Height = 35, Tag = rankKey };
+        var lbl = new Label { Text = displayName, Location = new Point(0, 5), Width = 180 };
+        var txt = new TextBox { Text = currentPath ?? "", Location = new Point(185, 2), Width = 280 };
+        var btn = new Button { Text = "選択...", Location = new Point(470, 0), Width = 70 };
+
+        btn.Click += (s, e) =>
+        {
+            using var ofd = new OpenFileDialog { Filter = "Image files (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg|All files (*.*)|*.*" };
+            if (ofd.ShowDialog() == DialogResult.OK) txt.Text = ofd.FileName;
+        };
+
+        row.Controls.Add(lbl);
+        row.Controls.Add(txt);
+        row.Controls.Add(btn);
+        return row;
     }
 
     private void InitializeCancelUi()
@@ -466,19 +586,19 @@ public partial class MainForm : Form
         }
 
         var ct = BeginOperation();
-        SetStatus("Dan.json 生成中...", true);
+        SetStatus("段位生成中...", true);
         SetIndeterminateProgress(true);
-        Log("Dan.json 生成を開始します。");
+        Log("段位生成を開始します。");
 
         try
         {
             string outputDir = txtDanOutputFolder.Text.Trim();
 
             string filter = txtWikiFilter.Text.Trim();
-            await DanGeneratorCore.GenerateAsync(txtWikiUrl.Text, outputDir, txtDanSongsPath.Text, filter, Log, ct);
-            Log("Dan.json 生成が完了しました。");
+            await DanGeneratorCore.GenerateAsync(txtWikiUrl.Text, outputDir, txtDanSongsPath.Text, filter, Log, _plateAssignments, ct);
+            Log("段位生成が完了しました。");
             Log($"出力先: {outputDir}");
-            MessageBox.Show("Dan.json 生成が完了しました。", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("段位生成が完了しました。", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
         {
@@ -514,7 +634,7 @@ public partial class MainForm : Form
         var ct = BeginOperation();
         SetStatus("TJA 変換中...", true);
         SetIndeterminateProgress(true);
-        Log("TJA から Dan.json への変換を開始します...");
+        Log("TJA から段位への変換を開始します...");
 
         try
         {

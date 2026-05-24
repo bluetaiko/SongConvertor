@@ -136,7 +136,7 @@ partial class MainForm
         this.tabSongSorter.Text = "SongSorter";
 
         this.lblTempSongs.Location = new System.Drawing.Point(20, 20);
-        this.lblTempSongs.Text = "コピー元の楽曲フォルダを選択:";
+        this.lblTempSongs.Text = "コピー元の楽曲の親フォルダを選択:";
         this.lblTempSongs.Size = new System.Drawing.Size(400, 20);
 
         this.txtTempSongs.Location = new System.Drawing.Point(20, 45);

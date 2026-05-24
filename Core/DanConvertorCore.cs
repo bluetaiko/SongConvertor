@@ -103,8 +103,8 @@ public class DanConvertorCore
             string danPlateSource = Path.Combine(localDir, "Dan_Plate.png");
             if (File.Exists(danPlateSource))
             {
-                File.Copy(danPlateSource, Path.Combine(outputDir, "Dan_Plate.png"), true);
-                danJson.danPlatePath = "Dan_Plate.png";
+                File.Copy(danPlateSource, Path.Combine(outputDir, "Plate.png"), true);
+                danJson.danPlatePath = "Plate.png";
             }
 
             finalSongs.Add(new DanSong { path = targetTjaName, genre = section.Genre, difficulty = 3 });

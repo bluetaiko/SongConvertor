@@ -57,11 +57,11 @@ public static class SongSorterCore
         var exeDir = AppDomain.CurrentDomain.BaseDirectory;
         var exportDir = Path.Combine(exeDir, "Export");
         if (!Directory.Exists(exportDir))
-            throw new InvalidOperationException("Export フォルダーが見つかりません。先に「譜面リスト更新」を実行してください。");
+            throw new InvalidOperationException("Exportフォルダが見つかりません。先に「譜面リスト更新」を実行してください。");
 
         var resolvedTempSongsDir = ResolveSongsRoot(tempSongsDir);
         if (!Directory.Exists(resolvedTempSongsDir))
-            throw new DirectoryNotFoundException("TempSongs フォルダーが見つかりません: " + resolvedTempSongsDir);
+            throw new DirectoryNotFoundException("コピー元の楽曲の親フォルダが見つかりません: " + resolvedTempSongsDir);
 
         var songsRoot = ResolveSongsRoot(destRootDir);
         Directory.CreateDirectory(songsRoot);
