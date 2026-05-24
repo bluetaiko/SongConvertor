@@ -23,7 +23,9 @@ public partial class MainForm : Form
     private readonly HashSet<string> _selectedSourceCategories = new(SongSorterCore.SourceCategories, StringComparer.OrdinalIgnoreCase);
     private Button? _btnCategorySelect;
     private Button? _btnPlateSelect;
+    private Button? _btnConvertAssetSelect;
     private readonly Dictionary<string, string> _plateAssignments = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _convertAssetAssignments = new(StringComparer.OrdinalIgnoreCase);
     private ToolStripStatusLabel? _cancelStatusLink;
     private CancellationTokenSource? _operationCts;
 
@@ -80,6 +82,7 @@ public partial class MainForm : Form
 
         InitializeCategorySelectorUi();
         InitializePlateSelectorUi();
+        InitializeConvertAssetSelectorUi();
         InitializeCancelUi();
         UpdateCategoryButtonText();
     }
@@ -308,6 +311,86 @@ public partial class MainForm : Form
         row.Controls.Add(txt);
         row.Controls.Add(btn);
         return row;
+    }
+
+    private void InitializeConvertAssetSelectorUi()
+    {
+        _btnConvertAssetSelect = new Button
+        {
+            Name = "btnConvertAssetSelect",
+            Text = "画像選択",
+            Size = btnConvertDan.Size,
+            Location = new Point(btnConvertDan.Right + 10, btnConvertDan.Top),
+            BackColor = Color.FromArgb(80, 80, 80),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = btnConvertDan.Font
+        };
+        _btnConvertAssetSelect.Click += (s, e) => ShowConvertAssetSelectionDialog();
+        tabDanConvertor.Controls.Add(_btnConvertAssetSelect);
+    }
+
+    private void ShowConvertAssetSelectionDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "画像設定 (DanConvertor)",
+            StartPosition = FormStartPosition.CenterParent,
+            ClientSize = new Size(580, 240),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+
+        var panel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(10)
+        };
+
+        var assets = new[] 
+        { 
+            ("danPlatePath", "Plate (段位プレート)"),
+            ("danPanelSidePath", "PanelSide (サイドパネル)"),
+            ("danTitlePlatePath", "TitlePlate (タイトルプレート)"),
+            ("danMiniPlatePath", "MiniPlate (ミニプレート)")
+        };
+
+        var textboxes = new Dictionary<string, TextBox>();
+
+        foreach (var (key, label) in assets)
+        {
+            var row = new Panel { Width = 550, Height = 35 };
+            var lbl = new Label { Text = label, Location = new Point(0, 5), Width = 180 };
+            var txt = new TextBox { Text = _convertAssetAssignments.GetValueOrDefault(key) ?? "", Location = new Point(185, 2), Width = 280 };
+            var btn = new Button { Text = "選択...", Location = new Point(470, 0), Width = 70 };
+
+            btn.Click += (s, e) =>
+            {
+                using var ofd = new OpenFileDialog { Filter = "Image files (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg|All files (*.*)|*.*" };
+                if (ofd.ShowDialog() == DialogResult.OK) txt.Text = ofd.FileName;
+            };
+
+            row.Controls.Add(lbl);
+            row.Controls.Add(txt);
+            row.Controls.Add(btn);
+            panel.Controls.Add(row);
+            textboxes[key] = txt;
+        }
+
+        var btnOk = new Button { Text = "保存", Dock = DockStyle.Bottom, Height = 40, DialogResult = DialogResult.OK };
+        dialog.Controls.Add(panel);
+        dialog.Controls.Add(btnOk);
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            foreach (var kvp in textboxes)
+            {
+                if (!string.IsNullOrWhiteSpace(kvp.Value.Text)) _convertAssetAssignments[kvp.Key] = kvp.Value.Text;
+                else _convertAssetAssignments.Remove(kvp.Key);
+            }
+            SaveSettings();
+        }
     }
 
     private void InitializeCancelUi()
@@ -669,7 +752,7 @@ public partial class MainForm : Form
                 ct.ThrowIfCancellationRequested();
                 Log($"処理開始: {Path.GetFileName(tja)}");
                 string simuFolder = string.IsNullOrWhiteSpace(txtDanConvertSimu.Text) ? "" : txtDanConvertSimu.Text;
-                await DanConvertorCore.ConvertAsync(tja, outputRoot, simuFolder, Log, ct);
+                await DanConvertorCore.ConvertAsync(tja, outputRoot, simuFolder, Log, _convertAssetAssignments, ct);
             }
 
             Log("すべての変換が完了しました。");
@@ -851,7 +934,8 @@ public partial class MainForm : Form
             DanConvertOutputFolder = txtDanConvertOutputFolder.Text,
             WikiFilter = "", // 記憶しない
             TjaFile = "", // 記憶しない
-            SelectedCategoriesCsv = string.Join("|", GetSelectedSourceCategories())
+            SelectedCategoriesCsv = string.Join("|", GetSelectedSourceCategories()),
+            ConvertAssetsJson = JsonSerializer.Serialize(_convertAssetAssignments)
         };
 
         var json = JsonSerializer.Serialize(settings);
@@ -896,6 +980,16 @@ public partial class MainForm : Form
                 foreach (var category in SongSorterCore.SourceCategories)
                     _selectedSourceCategories.Add(category);
             }
+
+            if (!string.IsNullOrEmpty(settings.ConvertAssetsJson))
+            {
+                var assets = JsonSerializer.Deserialize<Dictionary<string, string>>(settings.ConvertAssetsJson);
+                if (assets != null)
+                {
+                    _convertAssetAssignments.Clear();
+                    foreach (var kvp in assets) _convertAssetAssignments[kvp.Key] = kvp.Value;
+                }
+            }
         }
         catch { }
     }
@@ -926,5 +1020,6 @@ public partial class MainForm : Form
         public string WikiFilter { get; set; } = "";
         public string TjaFile { get; set; } = "";
         public string SelectedCategoriesCsv { get; set; } = "";
+        public string ConvertAssetsJson { get; set; } = "";
     }
 }

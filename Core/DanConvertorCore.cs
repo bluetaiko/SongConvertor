@@ -9,7 +9,7 @@ public class DanConvertorCore
 {
     private static readonly string[] MusicExtensions = { ".ogg", ".mp3", ".wav", ".wma", ".xa" };
 
-    public static async Task ConvertAsync(string tjaPath, string outputRoot, string simuFolder, Action<string>? logAction = null, CancellationToken ct = default)
+    public static async Task ConvertAsync(string tjaPath, string outputRoot, string simuFolder, Action<string>? logAction = null, Dictionary<string, string>? assetMap = null, CancellationToken ct = default)
     {
         if (!File.Exists(tjaPath)) return;
 
@@ -34,6 +34,31 @@ public class DanConvertorCore
         logAction?.Invoke($"分割優先変換を開始: {courseTitle} -> {outputDir}");
 
         var danJson = new DanJson { title = courseTitle, danIndex = 19 };
+
+        // 外部から指定された画像アセットの処理
+        if (assetMap != null)
+        {
+            var mapping = new Dictionary<string, (string key, string targetName)>
+            {
+                { "danPlatePath", ("danPlatePath", "Plate.png") },
+                { "danPanelSidePath", ("danPanelSidePath", "panelside.png") },
+                { "danTitlePlatePath", ("danTitlePlatePath", "titleplate.png") },
+                { "danMiniPlatePath", ("danMiniPlatePath", "miniplate.png") }
+            };
+
+            foreach (var map in mapping)
+            {
+                if (assetMap.TryGetValue(map.Key, out var sourcePath) && File.Exists(sourcePath))
+                {
+                    File.Copy(sourcePath, Path.Combine(outputDir, map.Value.targetName), true);
+                    if (map.Value.key == "danPlatePath") danJson.danPlatePath = map.Value.targetName;
+                    else if (map.Value.key == "danPanelSidePath") danJson.danPanelSidePath = map.Value.targetName;
+                    else if (map.Value.key == "danTitlePlatePath") danJson.danTitlePlatePath = map.Value.targetName;
+                    else if (map.Value.key == "danMiniPlatePath") danJson.danMiniPlatePath = map.Value.targetName;
+                }
+            }
+        }
+
         foreach (var line in lines)
         {
             if (line.StartsWith("#NEXTSONG", StringComparison.OrdinalIgnoreCase)) break;
@@ -103,8 +128,12 @@ public class DanConvertorCore
             string danPlateSource = Path.Combine(localDir, "Dan_Plate.png");
             if (File.Exists(danPlateSource))
             {
-                File.Copy(danPlateSource, Path.Combine(outputDir, "Plate.png"), true);
-                danJson.danPlatePath = "Plate.png";
+                // すでに外部指定で Plate.png がコピーされている場合はスキップ
+                if (danJson.danPlatePath == null)
+                {
+                    File.Copy(danPlateSource, Path.Combine(outputDir, "Plate.png"), true);
+                    danJson.danPlatePath = "Plate.png";
+                }
             }
 
             finalSongs.Add(new DanSong { path = targetTjaName, genre = section.Genre, difficulty = 3 });
@@ -273,6 +302,12 @@ public class DanConvertorCore
         public int danIndex { get; set; } = 0;
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public string? danPlatePath { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? danPanelSidePath { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? danTitlePlatePath { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? danMiniPlatePath { get; set; }
         public DanSong[] danSongs { get; set; } = Array.Empty<DanSong>();
         public ConditionGauge? conditionGauge { get; set; }
         public List<Condition> conditions { get; set; } = new();
