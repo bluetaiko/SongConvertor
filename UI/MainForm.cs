@@ -750,12 +750,13 @@ public partial class MainForm : Form
             Log($"{tjaFiles.Count} 個のTJAファイルを処理します。");
 
             int? danIndex = int.TryParse(txtDanConvertorIndex.Text, out int idx) ? idx : null;
+            string? miniPlateText = string.IsNullOrWhiteSpace(txtDanMiniPlateText.Text) ? null : txtDanMiniPlateText.Text.Trim();
             foreach (var tja in tjaFiles)
             {
                 ct.ThrowIfCancellationRequested();
                 Log($"処理開始: {Path.GetFileName(tja)}");
                 string simuFolder = string.IsNullOrWhiteSpace(txtDanConvertSimu.Text) ? "" : txtDanConvertSimu.Text;
-                await DanConvertorCore.ConvertAsync(tja, outputRoot, simuFolder, Log, _convertAssetAssignments, danIndex, ct);
+                await DanConvertorCore.ConvertAsync(tja, outputRoot, simuFolder, Log, _convertAssetAssignments, danIndex, miniPlateText, ct);
             }
 
             Log("すべての変換が完了しました。");
@@ -939,6 +940,7 @@ public partial class MainForm : Form
             TjaFile = "", // 記憶しない
             DanGeneratorIndex = "", // 記憶しない
             DanConvertorIndex = txtDanConvertorIndex.Text,
+            DanMiniPlateText = txtDanMiniPlateText.Text,
             SelectedCategoriesCsv = string.Join("|", GetSelectedSourceCategories()),
             ConvertAssetsJson = JsonSerializer.Serialize(_convertAssetAssignments)
         };
@@ -972,6 +974,7 @@ public partial class MainForm : Form
             txtWikiFilter.Text = "";
             txtDanGeneratorIndex.Text = "";
             txtDanConvertorIndex.Text = settings.DanConvertorIndex ?? "";
+            txtDanMiniPlateText.Text = settings.DanMiniPlateText ?? "";
 
             _selectedSourceCategories.Clear();
             var raw = settings.SelectedCategoriesCsv ?? string.Empty;
@@ -1028,6 +1031,7 @@ public partial class MainForm : Form
         public string TjaFile { get; set; } = "";
         public string DanGeneratorIndex { get; set; } = "";
         public string DanConvertorIndex { get; set; } = "";
+        public string DanMiniPlateText { get; set; } = "";
         public string SelectedCategoriesCsv { get; set; } = "";
         public string ConvertAssetsJson { get; set; } = "";
     }

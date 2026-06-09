@@ -9,7 +9,7 @@ public class DanConvertorCore
 {
     private static readonly string[] MusicExtensions = { ".ogg", ".mp3", ".wav", ".wma", ".xa" };
 
-    public static async Task ConvertAsync(string tjaPath, string outputRoot, string simuFolder, Action<string>? logAction = null, Dictionary<string, string>? assetMap = null, int? danIndexOverride = null, CancellationToken ct = default)
+    public static async Task ConvertAsync(string tjaPath, string outputRoot, string simuFolder, Action<string>? logAction = null, Dictionary<string, string>? assetMap = null, int? danIndexOverride = null, string? danMiniPlateText = null, CancellationToken ct = default)
     {
         if (!File.Exists(tjaPath)) return;
 
@@ -33,7 +33,7 @@ public class DanConvertorCore
         string? courseTitle = globalMeta.GetValueOrDefault("TITLE") ?? tjaFileName;
         logAction?.Invoke($"分割優先変換を開始: {courseTitle} -> {outputDir}");
 
-        var danJson = new DanJson { title = courseTitle, danIndex = danIndexOverride ?? 18 };
+        var danJson = new DanJson { title = courseTitle, danIndex = danIndexOverride ?? 18, danMiniPlateText = danMiniPlateText };
 
         // 外部から指定された画像アセットの処理
         if (assetMap != null)
@@ -347,6 +347,8 @@ public class DanConvertorCore
     {
         public string title { get; set; } = "";
         public int danIndex { get; set; } = 0;
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? danMiniPlateText { get; set; }
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public string? danPlatePath { get; set; }
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]

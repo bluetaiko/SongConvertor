@@ -70,6 +70,8 @@ partial class MainForm
         this.btnBrowseDanConvertSimu = new System.Windows.Forms.Button();
         this.lblDanConvertorIndex = new System.Windows.Forms.Label();
         this.txtDanConvertorIndex = new System.Windows.Forms.TextBox();
+        this.lblDanMiniPlateText = new System.Windows.Forms.Label();
+        this.txtDanMiniPlateText = new System.Windows.Forms.TextBox();
         this.btnConvertDan = new System.Windows.Forms.Button();
 
         this.tabControl.SuspendLayout();
@@ -254,6 +256,8 @@ partial class MainForm
         // tabDanConvertor
         this.tabDanConvertor.BackColor = System.Drawing.Color.White;
         this.tabDanConvertor.AllowDrop = true;
+        this.tabDanConvertor.Controls.Add(this.txtDanMiniPlateText);
+        this.tabDanConvertor.Controls.Add(this.lblDanMiniPlateText);
         this.tabDanConvertor.Controls.Add(this.txtDanConvertorIndex);
         this.tabDanConvertor.Controls.Add(this.lblDanConvertorIndex);
         this.tabDanConvertor.Controls.Add(this.btnBrowseDanConvertSimu);
@@ -294,12 +298,19 @@ partial class MainForm
 
         this.lblDanConvertorIndex.Location = new System.Drawing.Point(450, 85);
         this.lblDanConvertorIndex.Text = "DanIndex:";
-        this.lblDanConvertorIndex.Size = new System.Drawing.Size(100, 20);
+        this.lblDanConvertorIndex.Size = new System.Drawing.Size(70, 20);
 
         this.txtDanConvertorIndex.Location = new System.Drawing.Point(450, 110);
-        this.txtDanConvertorIndex.Size = new System.Drawing.Size(100, 23);
+        this.txtDanConvertorIndex.Size = new System.Drawing.Size(70, 23);
 
-        this.btnBrowseDanConvertOutputFolder.Location = new System.Drawing.Point(560, 108);
+        this.lblDanMiniPlateText.Location = new System.Drawing.Point(530, 85);
+        this.lblDanMiniPlateText.Text = "ミニプレート文字:";
+        this.lblDanMiniPlateText.Size = new System.Drawing.Size(100, 20);
+
+        this.txtDanMiniPlateText.Location = new System.Drawing.Point(530, 110);
+        this.txtDanMiniPlateText.Size = new System.Drawing.Size(100, 23);
+
+        this.btnBrowseDanConvertOutputFolder.Location = new System.Drawing.Point(640, 108);
         this.btnBrowseDanConvertOutputFolder.Size = new System.Drawing.Size(90, 27);
         this.btnBrowseDanConvertOutputFolder.Text = "参照...";
 
@@ -426,5 +437,7 @@ partial class MainForm
     private System.Windows.Forms.Button btnBrowseDanConvertSimu;
     private System.Windows.Forms.Label lblDanConvertorIndex;
     private System.Windows.Forms.TextBox txtDanConvertorIndex;
+    private System.Windows.Forms.Label lblDanMiniPlateText;
+    private System.Windows.Forms.TextBox txtDanMiniPlateText;
     private System.Windows.Forms.Button btnConvertDan;
 }
