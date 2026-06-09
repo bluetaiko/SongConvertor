@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using SongConverter.Core;
+using SongConverter.Utils;
 
 namespace SongConverter.UI;
 
@@ -70,6 +71,8 @@ public partial class MainForm : Form
 
         menuJapanese.Click += (s, e) => ChangeLanguage(Language.Japanese);
         menuEnglish.Click += (s, e) => ChangeLanguage(Language.English);
+        statusJapaneseMenu.Click += (s, e) => ChangeLanguage(Language.Japanese);
+        statusEnglishMenu.Click += (s, e) => ChangeLanguage(Language.English);
 
         // D&D
         tabDanConvertor.DragEnter += Control_DragEnter;
@@ -122,14 +125,14 @@ public partial class MainForm : Form
         }
     }
 
-    private void Log(string msg)
+    private void Log(string message)
     {
-        if (this.InvokeRequired)
+        if (InvokeRequired)
         {
-            this.Invoke(new Action(() => Log(msg)));
+            Invoke(new Action<string>(Log), message);
             return;
         }
-        logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}{Environment.NewLine}");
+        logBox.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
     }
 
     private void SetStatus(string msg, bool showProgress = false)
@@ -527,8 +530,8 @@ public partial class MainForm : Form
     private IReadOnlyCollection<string> GetSelectedFetchFileNames()
     {
         var selected = new HashSet<string>(GetSelectedSourceCategories(), StringComparer.OrdinalIgnoreCase);
-        return CategoryMap
-            .Where(m => selected.Contains(m.SourceCategory))
+        return GetCategoryMap()
+            .Where(m => selected.Contains(m.InternalName))
             .Select(m => m.FetchFileName)
             .ToArray();
     }
@@ -645,16 +648,19 @@ public partial class MainForm : Form
 
         try
         {
-            var outputDir = await DanGeneratorCore.GenerateAsync(
+            int? danIndex = int.TryParse(txtDanGeneratorIndex.Text, out int idx) ? idx : null;
+            await DanGeneratorCore.GenerateAsync(
                 txtWikiUrl.Text,
-                txtDanSongsPath.Text,
                 txtDanOutputFolder.Text,
+                txtDanSongsPath.Text,
                 txtWikiFilter.Text,
+                Log,
                 _plateAssignments,
+                danIndex,
                 ct);
 
             Log(LanguageManager.GetString("DanGenerateDone"));
-            Log(string.Format(LanguageManager.GetString("OutputFolder") + " {0}", outputDir));
+            Log(string.Format(LanguageManager.GetString("OutputFolder") + " {0}", txtDanOutputFolder.Text));
             MessageBox.Show(LanguageManager.GetString("DanGenerateDone"), LanguageManager.GetString("Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
@@ -723,11 +729,13 @@ public partial class MainForm : Form
 
             int? danIndex = int.TryParse(txtDanConvertorIndex.Text, out int idx) ? idx : null;
             string? miniPlateText = string.IsNullOrWhiteSpace(txtDanMiniPlateText.Text) ? null : txtDanMiniPlateText.Text.Trim();
+            string simuFolder = string.IsNullOrWhiteSpace(txtDanConvertSimu.Text) ? "" : txtDanConvertSimu.Text;
+            int current = 0;
             foreach (var tja in tjaFiles)
             {
                 ct.ThrowIfCancellationRequested();
+                SetProgressValue(++current, tjaFiles.Count);
                 Log(string.Format(LanguageManager.GetString("ProcessingFile"), Path.GetFileName(tja)));
-                string simuFolder = string.IsNullOrWhiteSpace(txtDanConvertSimu.Text) ? "" : txtDanConvertSimu.Text;
                 await DanConvertorCore.ConvertAsync(tja, outputRoot, simuFolder, Log, _convertAssetAssignments, danIndex, miniPlateText, ct);
             }
 
@@ -934,9 +942,12 @@ public partial class MainForm : Form
     private void ApplyLocalization()
     {
         this.Text = "SongConverter";
-        menuLanguage.Text = LanguageManager.GetString("Language");
+        menuLanguage.Text = "Language";
         menuJapanese.Text = "日本語 (Japanese)";
         menuEnglish.Text = "English";
+        statusLanguageButton.Text = "Language";
+        statusJapaneseMenu.Text = "日本語 (Japanese)";
+        statusEnglishMenu.Text = "English";
         
         // Tabs
         tabAddSongs.Text = LanguageManager.GetString("TabAddSongs");
@@ -956,6 +967,7 @@ public partial class MainForm : Form
         btnBrowseRoot.Text = LanguageManager.GetString("Browse");
         btnFetchLists.Text = LanguageManager.GetString("UpdateSongList");
         btnOrganize.Text = LanguageManager.GetString("StartSort");
+        if (_btnCategorySelect != null) UpdateCategoryButtonText();
 
         // Dan Generator
         lblWikiUrl.Text = LanguageManager.GetString("WikiUrl");
@@ -966,6 +978,7 @@ public partial class MainForm : Form
         lblDanSongsPath.Text = LanguageManager.GetString("SelectSongsFolder");
         btnBrowseDanSongs.Text = LanguageManager.GetString("Browse");
         btnGenerateDan.Text = LanguageManager.GetString("GenerateDan");
+        if (_btnPlateSelect != null) _btnPlateSelect.Text = LanguageManager.GetString("PlateSettings");
 
         // Dan Convertor
         lblTjaFile.Text = LanguageManager.GetString("TjaFile");
@@ -977,9 +990,14 @@ public partial class MainForm : Form
         lblDanConvertSimu.Text = LanguageManager.GetString("DanConvertSimu");
         btnBrowseDanConvertSimu.Text = LanguageManager.GetString("Browse");
         btnConvertDan.Text = LanguageManager.GetString("ExecuteConvert");
+        if (_btnConvertAssetSelect != null) _btnConvertAssetSelect.Text = LanguageManager.GetString("SelectImage");
 
         // Status
-        if (statusLabel.Text == "準備完了" || statusLabel.Text == "Ready." || statusLabel.Text == "Idle")
+        var currentStatus = statusLabel.Text;
+        if (string.IsNullOrEmpty(currentStatus) || 
+            currentStatus == "準備完了" || currentStatus == "準備完了。" || 
+            currentStatus == "Ready" || currentStatus == "Ready." || 
+            currentStatus == "待機中" || currentStatus == "Idle")
         {
             statusLabel.Text = LanguageManager.GetString("Ready");
         }

@@ -26,6 +26,9 @@ partial class MainForm
         this.tabDanConvertor = new System.Windows.Forms.TabPage();
         this.statusStrip = new System.Windows.Forms.StatusStrip();
         this.statusLabel = new System.Windows.Forms.ToolStripStatusLabel();
+        this.statusLanguageButton = new System.Windows.Forms.ToolStripDropDownButton();
+        this.statusJapaneseMenu = new System.Windows.Forms.ToolStripMenuItem();
+        this.statusEnglishMenu = new System.Windows.Forms.ToolStripMenuItem();
         this.progressBar = new System.Windows.Forms.ToolStripProgressBar();
         this.logBox = new System.Windows.Forms.TextBox();
 
@@ -373,16 +376,30 @@ partial class MainForm
         this.logBox.TabIndex = 1;
 
         // statusStrip
-        this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.statusLabel, this.progressBar });
+        this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.statusLabel, this.statusLanguageButton, this.progressBar });
         this.statusStrip.Location = new System.Drawing.Point(0, 599);
         this.statusStrip.Name = "statusStrip";
         this.statusStrip.Size = new System.Drawing.Size(684, 22);
         this.statusStrip.TabIndex = 2;
 
         this.statusLabel.Name = "statusLabel";
-        this.statusLabel.Size = new System.Drawing.Size(567, 17);
+        this.statusLabel.Size = new System.Drawing.Size(467, 17);
         this.statusLabel.Spring = true;
         this.statusLabel.Text = "準備完了";
+
+        // statusLanguageButton
+        this.statusLanguageButton.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] { this.statusJapaneseMenu, this.statusEnglishMenu });
+        this.statusLanguageButton.Name = "statusLanguageButton";
+        this.statusLanguageButton.Size = new System.Drawing.Size(100, 20);
+        this.statusLanguageButton.Text = "Language";
+
+        // statusJapaneseMenu
+        this.statusJapaneseMenu.Name = "statusJapaneseMenu";
+        this.statusJapaneseMenu.Text = "日本語 (Japanese)";
+
+        // statusEnglishMenu
+        this.statusEnglishMenu.Name = "statusEnglishMenu";
+        this.statusEnglishMenu.Text = "English";
 
         this.progressBar.Name = "progressBar";
         this.progressBar.Size = new System.Drawing.Size(100, 16);
@@ -427,6 +444,9 @@ partial class MainForm
     private System.Windows.Forms.TextBox logBox;
     private System.Windows.Forms.StatusStrip statusStrip;
     private System.Windows.Forms.ToolStripStatusLabel statusLabel;
+    private System.Windows.Forms.ToolStripDropDownButton statusLanguageButton;
+    private System.Windows.Forms.ToolStripMenuItem statusJapaneseMenu;
+    private System.Windows.Forms.ToolStripMenuItem statusEnglishMenu;
     private System.Windows.Forms.ToolStripProgressBar progressBar;
 
     private System.Windows.Forms.Button btnOrganize;
