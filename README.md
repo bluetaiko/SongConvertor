@@ -1,5 +1,8 @@
 # SongConverter
 
+JA: https://github.com/bluetaiko/SongConvertor/blob/main/README.md
+EN: https://github.com/bluetaiko/SongConvertor/blob/main/README_EN.md
+
 SongSorterの使い方
 esegitでtjaをコピーして、そのtjaの順番を本家と同じ順番にします。
 1. AddSongsタブで曲をダウンロードする親フォルダを選択して曲追加ボタンを押します。( gitをインストールしていない場合は https://git-scm.com/ からインストールしてください )
