@@ -15,6 +15,10 @@ partial class MainForm
 
     private void InitializeComponent()
     {
+        this.menuStrip = new System.Windows.Forms.MenuStrip();
+        this.menuLanguage = new System.Windows.Forms.ToolStripMenuItem();
+        this.menuJapanese = new System.Windows.Forms.ToolStripMenuItem();
+        this.menuEnglish = new System.Windows.Forms.ToolStripMenuItem();
         this.tabControl = new System.Windows.Forms.TabControl();
         this.tabAddSongs = new System.Windows.Forms.TabPage();
         this.tabSongSorter = new System.Windows.Forms.TabPage();
@@ -80,7 +84,28 @@ partial class MainForm
         this.tabDanGenerator.SuspendLayout();
         this.tabDanConvertor.SuspendLayout();
         this.statusStrip.SuspendLayout();
+        this.menuStrip.SuspendLayout();
         this.SuspendLayout();
+
+        // menuStrip
+        this.menuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.menuLanguage });
+        this.menuStrip.Location = new System.Drawing.Point(0, 0);
+        this.menuStrip.Name = "menuStrip";
+        this.menuStrip.Size = new System.Drawing.Size(800, 24);
+        this.menuStrip.TabIndex = 3;
+
+        // menuLanguage
+        this.menuLanguage.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] { this.menuJapanese, this.menuEnglish });
+        this.menuLanguage.Name = "menuLanguage";
+        this.menuLanguage.Text = "Language";
+
+        // menuJapanese
+        this.menuJapanese.Name = "menuJapanese";
+        this.menuJapanese.Text = "日本語 (Japanese)";
+
+        // menuEnglish
+        this.menuEnglish.Name = "menuEnglish";
+        this.menuEnglish.Text = "English";
 
         // tabControl
         this.tabControl.Controls.Add(this.tabAddSongs);
@@ -88,7 +113,7 @@ partial class MainForm
         this.tabControl.Controls.Add(this.tabDanGenerator);
         this.tabControl.Controls.Add(this.tabDanConvertor);
         this.tabControl.Dock = System.Windows.Forms.DockStyle.Top;
-        this.tabControl.Location = new System.Drawing.Point(0, 0);
+        this.tabControl.Location = new System.Drawing.Point(0, 24);
         this.tabControl.Name = "tabControl";
         this.tabControl.SelectedIndex = 0;
         this.tabControl.Size = new System.Drawing.Size(784, 450); // Expanded slightly for output folder
@@ -291,28 +316,28 @@ partial class MainForm
 
         this.lblDanConvertOutputFolder.Location = new System.Drawing.Point(20, 85);
         this.lblDanConvertOutputFolder.Text = "出力フォルダ:";
-        this.lblDanConvertOutputFolder.Size = new System.Drawing.Size(200, 20);
+        this.lblDanConvertOutputFolder.Size = new System.Drawing.Size(150, 20);
 
         this.txtDanConvertOutputFolder.Location = new System.Drawing.Point(20, 110);
-        this.txtDanConvertOutputFolder.Size = new System.Drawing.Size(420, 23);
+        this.txtDanConvertOutputFolder.Size = new System.Drawing.Size(250, 23);
 
-        this.lblDanConvertorIndex.Location = new System.Drawing.Point(450, 85);
+        this.btnBrowseDanConvertOutputFolder.Location = new System.Drawing.Point(280, 108);
+        this.btnBrowseDanConvertOutputFolder.Size = new System.Drawing.Size(80, 27);
+        this.btnBrowseDanConvertOutputFolder.Text = "参照...";
+
+        this.lblDanConvertorIndex.Location = new System.Drawing.Point(370, 85);
         this.lblDanConvertorIndex.Text = "DanIndex:";
         this.lblDanConvertorIndex.Size = new System.Drawing.Size(70, 20);
 
-        this.txtDanConvertorIndex.Location = new System.Drawing.Point(450, 110);
+        this.txtDanConvertorIndex.Location = new System.Drawing.Point(370, 110);
         this.txtDanConvertorIndex.Size = new System.Drawing.Size(70, 23);
 
-        this.lblDanMiniPlateText.Location = new System.Drawing.Point(530, 85);
+        this.lblDanMiniPlateText.Location = new System.Drawing.Point(450, 85);
         this.lblDanMiniPlateText.Text = "ミニプレート文字:";
         this.lblDanMiniPlateText.Size = new System.Drawing.Size(100, 20);
 
-        this.txtDanMiniPlateText.Location = new System.Drawing.Point(530, 110);
+        this.txtDanMiniPlateText.Location = new System.Drawing.Point(450, 110);
         this.txtDanMiniPlateText.Size = new System.Drawing.Size(100, 23);
-
-        this.btnBrowseDanConvertOutputFolder.Location = new System.Drawing.Point(640, 108);
-        this.btnBrowseDanConvertOutputFolder.Size = new System.Drawing.Size(90, 27);
-        this.btnBrowseDanConvertOutputFolder.Text = "参照...";
 
         this.lblDanConvertSimu.Location = new System.Drawing.Point(20, 145);
         this.lblDanConvertSimu.Text = "Songsフォルダ (省略可・フォールバック用):";
@@ -370,6 +395,8 @@ partial class MainForm
         this.Controls.Add(this.logBox);
         this.Controls.Add(this.statusStrip);
         this.Controls.Add(this.tabControl);
+        this.Controls.Add(this.menuStrip);
+        this.MainMenuStrip = this.menuStrip;
         this.Font = new System.Drawing.Font("Noto Sans", 9F);
         this.Name = "MainForm";
         this.Text = "SongConverter";
@@ -389,6 +416,10 @@ partial class MainForm
     }
 
     private System.Windows.Forms.TabControl tabControl;
+    private System.Windows.Forms.MenuStrip menuStrip;
+    private System.Windows.Forms.ToolStripMenuItem menuLanguage;
+    private System.Windows.Forms.ToolStripMenuItem menuJapanese;
+    private System.Windows.Forms.ToolStripMenuItem menuEnglish;
     private System.Windows.Forms.TabPage tabSongSorter;
     private System.Windows.Forms.TabPage tabDanGenerator;
     private System.Windows.Forms.TabPage tabAddSongs;

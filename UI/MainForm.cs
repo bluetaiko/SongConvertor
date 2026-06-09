@@ -8,16 +8,16 @@ public partial class MainForm : Form
 {
     private string SettingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SongConverter", "settings.json");
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
-    private static readonly (string SourceCategory, string FetchFileName)[] CategoryMap =
+    private (string InternalName, string DisplayName, string FetchFileName)[] GetCategoryMap() => new[]
     {
-        ("00 ポップス", "pops.php"),
-        ("01 キッズ", "kids.php"),
-        ("02 アニメ", "anime.php"),
-        ("03 ボーカロイド™曲", "vocaloid.php"),
-        ("04 ゲームミュージック", "game.php"),
-        ("05 バラエティ", "variety.php"),
-        ("06 クラシック", "classic.php"),
-        ("07 ナムコオリジナル", "namco.php")
+        ("00 ポップス", LanguageManager.GetString("CatPops"), "pops.php"),
+        ("01 キッズ", LanguageManager.GetString("CatKids"), "kids.php"),
+        ("02 アニメ", LanguageManager.GetString("CatAnime"), "anime.php"),
+        ("03 ボーカロイド™曲", LanguageManager.GetString("CatVocaloid"), "vocaloid.php"),
+        ("04 ゲームミュージック", LanguageManager.GetString("CatGame"), "game.php"),
+        ("05 バラエティ", LanguageManager.GetString("CatVariety"), "variety.php"),
+        ("06 クラシック", LanguageManager.GetString("CatClassic"), "classic.php"),
+        ("07 ナムコオリジナル", LanguageManager.GetString("CatNamco"), "namco.php")
     };
 
     private readonly HashSet<string> _selectedSourceCategories = new(SongSorterCore.SourceCategories, StringComparer.OrdinalIgnoreCase);
@@ -36,29 +36,23 @@ public partial class MainForm : Form
         {
             this.Icon = new Icon("SongConverter.ico");
         }
-        logBox.Text = "準備完了。" + Environment.NewLine;
         LoadSettings();
+        ApplyLocalization();
+        logBox.Text = LanguageManager.GetString("Ready") + Environment.NewLine;
         
         // Browsing
-        btnBrowseAddSongsFolder.Click += (s, e) => BrowseFolder(txtAddSongsFolder, true);
-        btnBrowseTemp.Click += (s, e) => BrowseFolder(txtTempSongs, true);
-        btnBrowseRoot.Click += (s, e) => BrowseFolder(txtTaikoRoot, false, true);
-        btnBrowseDanSongs.Click += (s, e) => BrowseFolder(txtDanSongsPath, false, true, true);
-        btnBrowseDanOutputFolder.Click += (s, e) => BrowseFolder(txtDanOutputFolder, false, true);
-        btnBrowseDanConvertSimu.Click += (s, e) => BrowseFolder(txtDanConvertSimu, false, true, true);
-        btnBrowseDanConvertOutputFolder.Click += (s, e) => BrowseFolder(txtDanConvertOutputFolder, false, true);
+        btnBrowseAddSongsFolder.Click += (s, e) => BrowseFolder(txtAddSongsFolder);
+        btnBrowseTemp.Click += (s, e) => BrowseFolder(txtTempSongs);
+        btnBrowseRoot.Click += (s, e) => BrowseFolder(txtTaikoRoot);
+        btnBrowseDanSongs.Click += (s, e) => BrowseFolder(txtDanSongsPath);
+        btnBrowseDanOutputFolder.Click += (s, e) => BrowseFolder(txtDanOutputFolder);
+        btnBrowseDanConvertSimu.Click += (s, e) => BrowseFolder(txtDanConvertSimu);
+        btnBrowseDanConvertOutputFolder.Click += (s, e) => BrowseFolder(txtDanConvertOutputFolder);
         btnBrowseTjaFile.Click += (s, e) => BrowseFile(txtTjaFile, "TJA files (*.tja)|*.tja|All files (*.*)|*.*");
 
-        // Sync Source Folders
-        txtAddSongsFolder.TextChanged += (s, e) => SyncSourceFolders(txtAddSongsFolder.Text);
-        // txtTempSongs の変更は AddSongs に反映させない（一方通行）
-        
-        // Sync Simu Folders
-        txtTaikoRoot.Leave += (s, e) => SyncSimuFolders(txtTaikoRoot.Text);
-        txtDanSongsPath.Leave += (s, e) => SyncSimuFolders(txtDanSongsPath.Text);
-        txtDanConvertSimu.Leave += (s, e) => SyncSimuFolders(txtDanConvertSimu.Text);
-
         // Save Settings on text change
+        txtAddSongsFolder.TextChanged += (s, e) => SaveSettings();
+        txtTempSongs.TextChanged += (s, e) => SaveSettings();
         txtDanOutputFolder.TextChanged += (s, e) => SaveSettings();
         txtDanConvertOutputFolder.TextChanged += (s, e) => SaveSettings();
         txtWikiUrl.TextChanged += (s, e) =>
@@ -73,6 +67,9 @@ public partial class MainForm : Form
         btnGenerateDan.Click += async (s, e) => await OnGenerateDanClick();
         btnExecuteAddSongs.Click += async (s, e) => await OnExecuteAddSongsClick();
         btnConvertDan.Click += async (s, e) => await OnConvertDanClick();
+
+        menuJapanese.Click += (s, e) => ChangeLanguage(Language.Japanese);
+        menuEnglish.Click += (s, e) => ChangeLanguage(Language.English);
 
         // D&D
         tabDanConvertor.DragEnter += Control_DragEnter;
@@ -105,28 +102,6 @@ public partial class MainForm : Form
         txtTjaFile.Text = string.Join(";", files);
     }
 
-    private void SyncSourceFolders(string value)
-    {
-        if (txtAddSongsFolder.Text != value) txtAddSongsFolder.Text = value;
-        
-        string sorterSource = string.IsNullOrWhiteSpace(value) ? "" : Path.Combine(value, "Songs");
-        if (txtTempSongs.Text != sorterSource) txtTempSongs.Text = sorterSource;
-    }
-
-    private void SyncOutputSubFolders(string value)
-    {
-        if (txtDanOutputFolder.Text != value) txtDanOutputFolder.Text = value;
-        if (txtDanConvertOutputFolder.Text != value) txtDanConvertOutputFolder.Text = value;
-    }
-
-    private void SyncSimuFolders(string newValue)
-    {
-        if (string.IsNullOrWhiteSpace(newValue)) return;
-        if (string.IsNullOrWhiteSpace(txtTaikoRoot.Text)) txtTaikoRoot.Text = newValue;
-        if (string.IsNullOrWhiteSpace(txtDanSongsPath.Text)) txtDanSongsPath.Text = newValue;
-        if (string.IsNullOrWhiteSpace(txtDanConvertSimu.Text)) txtDanConvertSimu.Text = newValue;
-    }
-
     private void BrowseFile(TextBox target, string filter)
     {
         using var ofd = new OpenFileDialog { Filter = filter };
@@ -137,14 +112,12 @@ public partial class MainForm : Form
         }
     }
 
-    private void BrowseFolder(TextBox target, bool isSource = false, bool isSimu = false, bool isConvertOrGenSimu = false)
+    private void BrowseFolder(TextBox target)
     {
         using var fbd = new FolderBrowserDialog();
         if (fbd.ShowDialog() == DialogResult.OK)
         {
             target.Text = fbd.SelectedPath;
-            if (isSource) SyncSourceFolders(target.Text);
-            if (isSimu) SyncSimuFolders(target.Text);
             SaveSettings();
         }
     }
@@ -184,7 +157,7 @@ public partial class MainForm : Form
         _btnCategorySelect = new Button
         {
             Name = "btnCategorySelect",
-            Text = "カテゴリー: 全て",
+            Text = LanguageManager.GetString("CategoryAll"),
             Location = new Point(370, 170),
             Size = new Size(280, 45),
             BackColor = Color.FromArgb(80, 80, 80),
@@ -207,7 +180,7 @@ public partial class MainForm : Form
         _btnPlateSelect = new Button
         {
             Name = "btnPlateSelect",
-            Text = "Plate画像選択",
+            Text = LanguageManager.GetString("PlateSettings"),
             Size = btnGenerateDan.Size,
             Location = new Point(btnGenerateDan.Right + 10, btnGenerateDan.Top),
             BackColor = Color.FromArgb(80, 80, 80),
@@ -223,7 +196,7 @@ public partial class MainForm : Form
     {
         if (string.IsNullOrWhiteSpace(txtWikiUrl.Text))
         {
-            MessageBox.Show("先にWiki URLを入力してください。", "通知", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(LanguageManager.GetString("WikiUrlFirst"), LanguageManager.GetString("Ready"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -234,13 +207,13 @@ public partial class MainForm : Form
             var ranks = await DanGeneratorCore.FetchRankNamesAsync(txtWikiUrl.Text);
             if (ranks.Count == 0)
             {
-                MessageBox.Show("段位名が見つかりませんでした。URLを確認してください。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(LanguageManager.GetString("DanNameNotFound"), LanguageManager.GetString("Warn"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             using var dialog = new Form
             {
-                Text = "Plate画像個別設定",
+                Text = LanguageManager.GetString("PlateIndividualSettings"),
                 StartPosition = FormStartPosition.CenterParent,
                 ClientSize = new Size(600, 500),
                 FormBorderStyle = FormBorderStyle.Sizable,
@@ -255,14 +228,13 @@ public partial class MainForm : Form
             };
 
             // 全体設定用の行
-            panel.Controls.Add(CreatePlateRow("*", "【すべての段位に適用】", _plateAssignments.GetValueOrDefault("*")));
-
+            panel.Controls.Add(CreatePlateRow("*", LanguageManager.GetString("ApplyToAllDan"), _plateAssignments.GetValueOrDefault("*")));
             foreach (var rank in ranks)
             {
                 panel.Controls.Add(CreatePlateRow(rank, rank, _plateAssignments.GetValueOrDefault(rank)));
             }
 
-            var btnOk = new Button { Text = "保存", Dock = DockStyle.Bottom, Height = 40, DialogResult = DialogResult.OK };
+            var btnOk = new Button { Text = LanguageManager.GetString("Save"), Dock = DockStyle.Bottom, Height = 40, DialogResult = DialogResult.OK };
             dialog.Controls.Add(panel);
             dialog.Controls.Add(btnOk);
 
@@ -301,7 +273,7 @@ public partial class MainForm : Form
         var row = new Panel { Width = 550, Height = 35, Tag = rankKey };
         var lbl = new Label { Text = displayName, Location = new Point(0, 5), Width = 180 };
         var txt = new TextBox { Text = currentPath ?? "", Location = new Point(185, 2), Width = 280 };
-        var btn = new Button { Text = "選択...", Location = new Point(470, 0), Width = 70 };
+        var btn = new Button { Text = LanguageManager.GetString("Browse"), Location = new Point(470, 0), Width = 70 };
 
         btn.Click += (s, e) =>
         {
@@ -320,7 +292,7 @@ public partial class MainForm : Form
         _btnConvertAssetSelect = new Button
         {
             Name = "btnConvertAssetSelect",
-            Text = "画像選択",
+            Text = LanguageManager.GetString("SelectImage"),
             Size = btnConvertDan.Size,
             Location = new Point(btnConvertDan.Right + 10, btnConvertDan.Top),
             BackColor = Color.FromArgb(80, 80, 80),
@@ -336,7 +308,7 @@ public partial class MainForm : Form
     {
         using var dialog = new Form
         {
-            Text = "画像設定 (DanConvertor)",
+            Text = LanguageManager.GetString("ImageSettingsConv"),
             StartPosition = FormStartPosition.CenterParent,
             ClientSize = new Size(580, 240),
             FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -352,10 +324,10 @@ public partial class MainForm : Form
 
         var assets = new[] 
         { 
-            ("danPlatePath", "Plate (段位プレート)"),
-            ("danPanelSidePath", "PanelSide (サイドパネル)"),
-            ("danTitlePlatePath", "TitlePlate (タイトルプレート)"),
-            ("danMiniPlatePath", "MiniPlate (ミニプレート)")
+            ("danPlatePath", "Plate"),
+            ("danPanelSidePath", "PanelSide"),
+            ("danTitlePlatePath", "TitlePlate"),
+            ("danMiniPlatePath", "MiniPlate")
         };
 
         var textboxes = new Dictionary<string, TextBox>();
@@ -365,7 +337,7 @@ public partial class MainForm : Form
             var row = new Panel { Width = 550, Height = 35 };
             var lbl = new Label { Text = label, Location = new Point(0, 5), Width = 180 };
             var txt = new TextBox { Text = _convertAssetAssignments.GetValueOrDefault(key) ?? "", Location = new Point(185, 2), Width = 280 };
-            var btn = new Button { Text = "選択...", Location = new Point(470, 0), Width = 70 };
+            var btn = new Button { Text = LanguageManager.GetString("Browse"), Location = new Point(470, 0), Width = 70 };
 
             btn.Click += (s, e) =>
             {
@@ -380,7 +352,7 @@ public partial class MainForm : Form
             textboxes[key] = txt;
         }
 
-        var btnOk = new Button { Text = "保存", Dock = DockStyle.Bottom, Height = 40, DialogResult = DialogResult.OK };
+        var btnOk = new Button { Text = LanguageManager.GetString("Save"), Dock = DockStyle.Bottom, Height = 40, DialogResult = DialogResult.OK };
         dialog.Controls.Add(panel);
         dialog.Controls.Add(btnOk);
 
@@ -400,7 +372,7 @@ public partial class MainForm : Form
         _cancelStatusLink = new ToolStripStatusLabel
         {
             IsLink = true,
-            Text = "中断",
+            Text = LanguageManager.GetString("Interrupt"),
             Enabled = false,
             ForeColor = Color.Red
         };
@@ -408,7 +380,7 @@ public partial class MainForm : Form
         {
             if (_operationCts == null || _operationCts.IsCancellationRequested) return;
             _operationCts.Cancel();
-            Log("中断を受け付けました。");
+            Log(LanguageManager.GetString("Interrupted"));
         };
         statusStrip.Items.Add(_cancelStatusLink);
     }
@@ -474,7 +446,7 @@ public partial class MainForm : Form
     {
         using var dialog = new Form
         {
-            Text = "カテゴリー選択",
+            Text = LanguageManager.GetString("CategorySelect"),
             StartPosition = FormStartPosition.CenterParent,
             ClientSize = new Size(360, 380),
             FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -489,16 +461,16 @@ public partial class MainForm : Form
             CheckOnClick = true
         };
 
-        foreach (var category in SongSorterCore.SourceCategories)
+        var categoryMap = GetCategoryMap();
+        foreach (var cat in categoryMap)
         {
-            var isChecked = _selectedSourceCategories.Count == 0 || _selectedSourceCategories.Contains(category);
-            checkedList.Items.Add(category, isChecked);
+            checkedList.Items.Add(cat.DisplayName, _selectedSourceCategories.Contains(cat.InternalName));
         }
 
-        var btnAll = new Button { Text = "全て", Location = new Point(12, 300), Size = new Size(80, 30) };
-        var btnNone = new Button { Text = "なし", Location = new Point(100, 300), Size = new Size(80, 30) };
-        var btnOk = new Button { Text = "決定", Location = new Point(190, 340), Size = new Size(75, 30), DialogResult = DialogResult.OK };
-        var btnCancel = new Button { Text = "キャンセル", Location = new Point(273, 340), Size = new Size(75, 30), DialogResult = DialogResult.Cancel };
+        var btnAll = new Button { Text = LanguageManager.GetString("All"), Location = new Point(12, 300), Size = new Size(80, 30) };
+        var btnNone = new Button { Text = LanguageManager.GetString("None"), Location = new Point(100, 300), Size = new Size(80, 30) };
+        var btnOk = new Button { Text = LanguageManager.GetString("OK"), Location = new Point(190, 340), Size = new Size(75, 30), DialogResult = DialogResult.OK };
+        var btnCancel = new Button { Text = LanguageManager.GetString("Cancel"), Location = new Point(273, 340), Size = new Size(75, 30), DialogResult = DialogResult.Cancel };
 
         btnAll.Click += (s, e) =>
         {
@@ -520,9 +492,12 @@ public partial class MainForm : Form
         if (dialog.ShowDialog(this) != DialogResult.OK) return false;
 
         _selectedSourceCategories.Clear();
-        foreach (var item in checkedList.CheckedItems)
+        for (int i = 0; i < checkedList.Items.Count; i++)
         {
-            if (item is string category) _selectedSourceCategories.Add(category);
+            if (checkedList.GetItemChecked(i))
+            {
+                _selectedSourceCategories.Add(categoryMap[i].InternalName);
+            }
         }
 
         if (_selectedSourceCategories.Count == 0)
@@ -539,7 +514,7 @@ public partial class MainForm : Form
         if (_btnCategorySelect == null) return;
         var total = SongSorterCore.SourceCategories.Length;
         var selected = _selectedSourceCategories.Count == 0 ? total : _selectedSourceCategories.Count;
-        _btnCategorySelect.Text = selected >= total ? "カテゴリー: 全て" : $"カテゴリー: {selected}/{total}";
+        _btnCategorySelect.Text = selected >= total ? LanguageManager.GetString("CategoryAll") : string.Format(LanguageManager.GetString("CategoryCount"), selected, total);
     }
 
     private IReadOnlyCollection<string> GetSelectedSourceCategories()
@@ -561,50 +536,45 @@ public partial class MainForm : Form
     private async Task OnFetchListsClick()
     {
         var ct = BeginOperation();
-        SetStatus("譜面リスト取得中...", true);
-        SetIndeterminateProgress(false);
-        Log("公開譜面リストの取得を開始します。");
+        SetStatus(LanguageManager.GetString("FetchingList"), true);
+        SetIndeterminateProgress(true);
+        Log(LanguageManager.GetString("StartFetchList"));
 
         try
         {
             var exportDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Export");
+            var categoryMap = GetCategoryMap();
             Directory.CreateDirectory(exportDir);
 
-            var selectedFiles = new HashSet<string>(GetSelectedFetchFileNames(), StringComparer.OrdinalIgnoreCase);
-            var categories = SongListBase.Categories.Where(c => selectedFiles.Contains(c.FileName)).ToArray();
-            SetProgressValue(0, categories.Length);
-
-            for (var i = 0; i < categories.Length; i++)
+            foreach (var cat in categoryMap)
             {
-                ct.ThrowIfCancellationRequested();
-                var cat = categories[i];
-                Log($"取得中: {cat.FileName}");
+                if (!_selectedSourceCategories.Contains(cat.InternalName)) continue;
 
-                var songs = await SongListFetcher.FetchSongsAsync(cat.FileName, ct);
-                var filePath = Path.Combine(exportDir, $"songlist_{cat.DisplayName}.txt");
-                var lines = songs.Select((s, n) => $"{n + 1:000}\t{s.Title}\t{s.Subtitle}");
+                Log(string.Format(LanguageManager.GetString("Processing"), cat.FetchFileName));
+                var songs = await SongListFetcher.FetchSongsAsync(cat.FetchFileName, ct);
+                
+                var filePath = Path.Combine(exportDir, cat.FetchFileName.Replace(".php", ".txt"));
+                var lines = songs.Select(s => $"{s.Title}\t{s.Subtitle}");
                 await File.WriteAllLinesAsync(filePath, lines, Utf8NoBom, ct);
-
-                SetProgressValue(i + 1, categories.Length);
             }
 
-            Log("譜面リストの更新が完了しました。");
-            MessageBox.Show("譜面リストの更新が完了しました。", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(LanguageManager.GetString("FetchDone"));
+            MessageBox.Show(LanguageManager.GetString("FetchDone"), LanguageManager.GetString("Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
         {
-            Log("ユーザー操作で中断しました。");
-            MessageBox.Show("処理を中断しました。", "中断", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(LanguageManager.GetString("UserCancelled"));
+            MessageBox.Show(LanguageManager.GetString("UserCancelled"), LanguageManager.GetString("Interrupt"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            Log($"エラー: {ex.Message}");
-            MessageBox.Show(ex.Message, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Log(string.Format(LanguageManager.GetString("Error") + ": {0}", ex.Message));
+            MessageBox.Show(ex.Message, LanguageManager.GetString("Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
-            SetStatus("待機中");
             EndOperation();
+            SetStatus(LanguageManager.GetString("Wait"));
         }
     }
 
@@ -612,47 +582,45 @@ public partial class MainForm : Form
     {
         if (string.IsNullOrWhiteSpace(txtTempSongs.Text) || string.IsNullOrWhiteSpace(txtTaikoRoot.Text))
         {
-            MessageBox.Show("コピー元とシミュフォルダを設定してください。", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(LanguageManager.GetString("WarnSelectSourceSimu"), LanguageManager.GetString("Warn"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         var ct = BeginOperation();
-        SetStatus("曲フォルダー整理中...", true);
-        SetProgressValue(0, 1);
-        Log("曲フォルダー整理を開始します。");
+        SetStatus(LanguageManager.GetString("Organizing"), true);
+        SetIndeterminateProgress(true);
+        Log(LanguageManager.GetString("StartOrganize"));
 
         try
         {
             var runId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var selectedCategories = GetSelectedSourceCategories();
-            var result = await Task.Run(() =>
+            var result = await Task.Run(() => 
                 SongSorterCore.OrganizeSongsDetailed(
-                    txtTempSongs.Text,
-                    txtTaikoRoot.Text,
-                    runId,
-                    selectedCategories,
-                    Log,
-                    ct,
-                    p => SetProgressValue(p.ProcessedFolders, p.TotalFolders)), ct);
+                    txtTempSongs.Text, 
+                    txtTaikoRoot.Text, 
+                    runId, 
+                    GetSelectedSourceCategories(), 
+                    Log, 
+                    ct), ct);
 
             Log(result.Summary);
-            Log($"詳細レポート: {result.ReportPath}");
-            MessageBox.Show($"{result.Summary}\n\n詳細レポート:\n{result.ReportPath}", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(string.Format(LanguageManager.GetString("Done") + ": {0}", result.ReportPath));
+            MessageBox.Show($"{result.Summary}\n\n{result.ReportPath}", LanguageManager.GetString("Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
         {
-            Log("ユーザー操作で中断しました。");
-            MessageBox.Show("処理を中断しました。", "中断", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(LanguageManager.GetString("UserCancelled"));
+            MessageBox.Show(LanguageManager.GetString("UserCancelled"), LanguageManager.GetString("Interrupt"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            Log($"エラー: {ex.Message}");
-            MessageBox.Show(ex.Message, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Log(string.Format(LanguageManager.GetString("Error") + ": {0}", ex.Message));
+            MessageBox.Show(ex.Message, LanguageManager.GetString("Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
-            SetStatus("待機中");
             EndOperation();
+            SetStatus(LanguageManager.GetString("Wait"));
         }
     }
 
@@ -660,45 +628,49 @@ public partial class MainForm : Form
     {
         if (string.IsNullOrWhiteSpace(txtWikiUrl.Text) || string.IsNullOrWhiteSpace(txtDanSongsPath.Text))
         {
-            MessageBox.Show("Wiki URLとシミュフォルダを入力してください。", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(LanguageManager.GetString("WarnInputWikiSimu"), LanguageManager.GetString("Warn"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(txtDanOutputFolder.Text))
         {
-            MessageBox.Show("出力フォルダを選択してください。", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(LanguageManager.GetString("WarnSelectOutput"), LanguageManager.GetString("Warn"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         var ct = BeginOperation();
-        SetStatus("段位生成中...", true);
+        SetStatus(LanguageManager.GetString("DanGenerating"), true);
         SetIndeterminateProgress(true);
-        Log("段位生成を開始します。");
+        Log(LanguageManager.GetString("StartDanGenerate"));
 
         try
         {
-            string outputDir = txtDanOutputFolder.Text.Trim();
+            var outputDir = await DanGeneratorCore.GenerateAsync(
+                txtWikiUrl.Text,
+                txtDanSongsPath.Text,
+                txtDanOutputFolder.Text,
+                txtWikiFilter.Text,
+                _plateAssignments,
+                ct);
 
-            string filter = txtWikiFilter.Text.Trim();
-            await DanGeneratorCore.GenerateAsync(txtWikiUrl.Text, outputDir, txtDanSongsPath.Text, filter, Log, _plateAssignments, null, ct);
-            Log("段位生成が完了しました。");
-            Log($"出力先: {outputDir}");
-            MessageBox.Show("段位生成が完了しました。", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(LanguageManager.GetString("DanGenerateDone"));
+            Log(string.Format(LanguageManager.GetString("OutputFolder") + " {0}", outputDir));
+            MessageBox.Show(LanguageManager.GetString("DanGenerateDone"), LanguageManager.GetString("Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
         {
-            Log("ユーザー操作で中断しました。");
-            MessageBox.Show("処理を中断しました。", "中断", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(LanguageManager.GetString("UserCancelled"));
+            MessageBox.Show(LanguageManager.GetString("UserCancelled"), LanguageManager.GetString("Interrupt"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            Log($"エラー: {ex.Message}");
-            MessageBox.Show(ex.Message, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Log(string.Format(LanguageManager.GetString("Error") + ": {0}", ex.Message));
+            MessageBox.Show(ex.Message, LanguageManager.GetString("Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
-            SetStatus("待機中");
             EndOperation();
+            SetStatus(LanguageManager.GetString("Wait"));
         }
     }
 
@@ -706,20 +678,20 @@ public partial class MainForm : Form
     {
         if (string.IsNullOrWhiteSpace(txtTjaFile.Text))
         {
-            MessageBox.Show("変換対象のTJAを選択してください。", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(LanguageManager.GetString("WarnSelectTja"), LanguageManager.GetString("Warn"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(txtDanConvertOutputFolder.Text))
         {
-            MessageBox.Show("出力フォルダを選択してください。", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(LanguageManager.GetString("WarnSelectOutput"), LanguageManager.GetString("Warn"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         var ct = BeginOperation();
-        SetStatus("TJA 変換中...", true);
+        SetStatus(LanguageManager.GetString("ConvertingTja"), true);
         SetIndeterminateProgress(true);
-        Log("TJA から段位への変換を開始します...");
+        Log(LanguageManager.GetString("StartTjaConvert"));
 
         try
         {
@@ -743,37 +715,37 @@ public partial class MainForm : Form
 
             if (tjaFiles.Count == 0)
             {
-                Log("有効なTJAファイルが見つかりませんでした。");
+                Log(LanguageManager.GetString("NoValidTja"));
                 return;
             }
 
-            Log($"{tjaFiles.Count} 個のTJAファイルを処理します。");
+            Log(string.Format(LanguageManager.GetString("ProcessingCount"), tjaFiles.Count));
 
             int? danIndex = int.TryParse(txtDanConvertorIndex.Text, out int idx) ? idx : null;
             string? miniPlateText = string.IsNullOrWhiteSpace(txtDanMiniPlateText.Text) ? null : txtDanMiniPlateText.Text.Trim();
             foreach (var tja in tjaFiles)
             {
                 ct.ThrowIfCancellationRequested();
-                Log($"処理開始: {Path.GetFileName(tja)}");
+                Log(string.Format(LanguageManager.GetString("ProcessingFile"), Path.GetFileName(tja)));
                 string simuFolder = string.IsNullOrWhiteSpace(txtDanConvertSimu.Text) ? "" : txtDanConvertSimu.Text;
                 await DanConvertorCore.ConvertAsync(tja, outputRoot, simuFolder, Log, _convertAssetAssignments, danIndex, miniPlateText, ct);
             }
 
-            Log("すべての変換が完了しました。");
-            MessageBox.Show($"{tjaFiles.Count} 件の変換が完了しました。", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(LanguageManager.GetString("ConvertDone"));
+            MessageBox.Show(string.Format(LanguageManager.GetString("ConvertDoneCount"), tjaFiles.Count), LanguageManager.GetString("Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
         {
-            Log("中断されました。");
+            Log(LanguageManager.GetString("Interrupted"));
         }
         catch (Exception ex)
         {
-            Log($"エラー: {ex.Message}");
-            MessageBox.Show(ex.Message, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Log(string.Format(LanguageManager.GetString("Error") + ": {0}", ex.Message));
+            MessageBox.Show(ex.Message, LanguageManager.GetString("Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
-            SetStatus("待機中");
+            SetStatus(LanguageManager.GetString("Wait"));
             EndOperation();
         }
     }
@@ -782,23 +754,23 @@ public partial class MainForm : Form
     {
         if (string.IsNullOrWhiteSpace(txtAddSongsFolder.Text))
         {
-            MessageBox.Show("作業フォルダーを設定してください。", "警告", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(LanguageManager.GetString("WarnSelectWorkFolder"), LanguageManager.GetString("Warn"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         var ct = BeginOperation();
-        SetStatus("AddSongs 同期中...", true);
+        SetStatus(LanguageManager.GetString("AddSongsSyncing"), true);
         SetIndeterminateProgress(true);
-        Log("AddSongs 同期を開始します。");
+        Log(LanguageManager.GetString("StartAddSongsSync"));
 
         try
         {
             bool gitInstalled = await CheckGitInstalledAsync();
             if (!gitInstalled)
             {
-                Log("Git がインストールされていません。");
-                Log("インストール先: https://git-scm.com/");
-                MessageBox.Show("Git が必要です。https://git-scm.com/ からインストールしてください。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Log(LanguageManager.GetString("GitNotFound"));
+                Log("URL: https://git-scm.com/");
+                MessageBox.Show(LanguageManager.GetString("GitNeeded"), LanguageManager.GetString("Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -810,36 +782,36 @@ public partial class MainForm : Form
 
             if (Directory.Exists(gitDir))
             {
-                Log("既存の Songs リポジトリを検出しました。pull を実行します。");
+                Log(LanguageManager.GetString("ExistingRepoFound"));
                 await RunGitPullAsync(targetDir, ct);
             }
             else if (Directory.Exists(songsDir))
             {
-                throw new Exception("Songs フォルダーは存在しますが、Git リポジトリではありません。");
+                throw new Exception("Songs folder exists but is not a Git repository.");
             }
             else
             {
-                Log("Songs リポジトリが見つからないため clone を実行します。");
+                Log(LanguageManager.GetString("CloneRepo"));
                 await RunGitCloneAsync(targetDir, ct);
             }
 
-            Log("AddSongs 同期が完了しました。");
-            MessageBox.Show("AddSongs 同期が完了しました。", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(LanguageManager.GetString("AddSongsSyncDone"));
+            MessageBox.Show(LanguageManager.GetString("AddSongsSyncDone"), LanguageManager.GetString("Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (OperationCanceledException)
         {
-            Log("ユーザー操作で中断しました。");
-            MessageBox.Show("処理を中断しました。", "中断", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log(LanguageManager.GetString("UserCancelled"));
+            MessageBox.Show(LanguageManager.GetString("UserCancelled"), LanguageManager.GetString("Interrupt"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            Log($"エラー: {ex.Message}");
-            MessageBox.Show(ex.Message, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Log(string.Format(LanguageManager.GetString("Error") + ": {0}", ex.Message));
+            MessageBox.Show(ex.Message, LanguageManager.GetString("Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
-            SetStatus("待機中");
             EndOperation();
+            SetStatus(LanguageManager.GetString("Wait"));
         }
     }
 
@@ -942,12 +914,75 @@ public partial class MainForm : Form
             DanConvertorIndex = txtDanConvertorIndex.Text,
             DanMiniPlateText = txtDanMiniPlateText.Text,
             SelectedCategoriesCsv = string.Join("|", GetSelectedSourceCategories()),
-            ConvertAssetsJson = JsonSerializer.Serialize(_convertAssetAssignments)
+            ConvertAssetsJson = JsonSerializer.Serialize(_convertAssetAssignments),
+            Language = LanguageManager.CurrentLanguage.ToString()
         };
 
         var json = JsonSerializer.Serialize(settings);
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         File.WriteAllText(SettingsPath, json, Utf8NoBom);
+    }
+
+    private void ChangeLanguage(Language lang)
+    {
+        LanguageManager.SetLanguage(lang);
+        ApplyLocalization();
+        UpdateCategoryButtonText();
+        SaveSettings();
+    }
+
+    private void ApplyLocalization()
+    {
+        this.Text = "SongConverter";
+        menuLanguage.Text = LanguageManager.GetString("Language");
+        menuJapanese.Text = "日本語 (Japanese)";
+        menuEnglish.Text = "English";
+        
+        // Tabs
+        tabAddSongs.Text = LanguageManager.GetString("TabAddSongs");
+        tabSongSorter.Text = LanguageManager.GetString("TabSongSorter");
+        tabDanGenerator.Text = LanguageManager.GetString("TabDanGenerator");
+        tabDanConvertor.Text = LanguageManager.GetString("TabDanConvertor");
+
+        // Add Songs
+        lblAddSongsFolder.Text = LanguageManager.GetString("SelectDownloadFolder");
+        btnBrowseAddSongsFolder.Text = LanguageManager.GetString("Browse");
+        btnExecuteAddSongs.Text = LanguageManager.GetString("ExecuteAddSongs");
+
+        // Song Sorter
+        lblTempSongs.Text = LanguageManager.GetString("SelectSourceSongs");
+        btnBrowseTemp.Text = LanguageManager.GetString("Browse");
+        lblTaikoRoot.Text = LanguageManager.GetString("SelectDestSongs");
+        btnBrowseRoot.Text = LanguageManager.GetString("Browse");
+        btnFetchLists.Text = LanguageManager.GetString("UpdateSongList");
+        btnOrganize.Text = LanguageManager.GetString("StartSort");
+
+        // Dan Generator
+        lblWikiUrl.Text = LanguageManager.GetString("WikiUrl");
+        lblWikiFilter.Text = LanguageManager.GetString("FilterDan");
+        lblDanGeneratorIndex.Text = LanguageManager.GetString("DanIndex");
+        lblDanOutputFolder.Text = LanguageManager.GetString("OutputFolder");
+        btnBrowseDanOutputFolder.Text = LanguageManager.GetString("Browse");
+        lblDanSongsPath.Text = LanguageManager.GetString("SelectSongsFolder");
+        btnBrowseDanSongs.Text = LanguageManager.GetString("Browse");
+        btnGenerateDan.Text = LanguageManager.GetString("GenerateDan");
+
+        // Dan Convertor
+        lblTjaFile.Text = LanguageManager.GetString("TjaFile");
+        btnBrowseTjaFile.Text = LanguageManager.GetString("Browse");
+        lblDanConvertOutputFolder.Text = LanguageManager.GetString("DanConvertOutputFolder");
+        btnBrowseDanConvertOutputFolder.Text = LanguageManager.GetString("Browse");
+        lblDanConvertorIndex.Text = LanguageManager.GetString("DanIndex");
+        lblDanMiniPlateText.Text = LanguageManager.GetString("MiniPlateText");
+        lblDanConvertSimu.Text = LanguageManager.GetString("DanConvertSimu");
+        btnBrowseDanConvertSimu.Text = LanguageManager.GetString("Browse");
+        btnConvertDan.Text = LanguageManager.GetString("ExecuteConvert");
+
+        // Status
+        if (statusLabel.Text == "準備完了" || statusLabel.Text == "Ready." || statusLabel.Text == "Idle")
+        {
+            statusLabel.Text = LanguageManager.GetString("Ready");
+        }
     }
 
     private void LoadSettings()
@@ -975,6 +1010,11 @@ public partial class MainForm : Form
             txtDanGeneratorIndex.Text = "";
             txtDanConvertorIndex.Text = settings.DanConvertorIndex ?? "";
             txtDanMiniPlateText.Text = settings.DanMiniPlateText ?? "";
+
+            if (!string.IsNullOrEmpty(settings.Language) && Enum.TryParse<Language>(settings.Language, out var lang))
+            {
+                LanguageManager.SetLanguage(lang);
+            }
 
             _selectedSourceCategories.Clear();
             var raw = settings.SelectedCategoriesCsv ?? string.Empty;
@@ -1034,5 +1074,6 @@ public partial class MainForm : Form
         public string DanMiniPlateText { get; set; } = "";
         public string SelectedCategoriesCsv { get; set; } = "";
         public string ConvertAssetsJson { get; set; } = "";
+        public string Language { get; set; } = "";
     }
 }
