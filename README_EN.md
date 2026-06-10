@@ -1,5 +1,9 @@
 # SongConverter
 
+JA: https://github.com/bluetaiko/SongConvertor/blob/main/README.md
+
+EN: https://github.com/bluetaiko/SongConvertor/blob/main/README_EN.md
+
 ## How to use SongSorter
 Copies TJA files from esegit and organizes them in the same order as the official game.
 1. In the **AddSongs** tab, select the parent folder where you want to download songs and click the "Add Songs" button. (If Git is not installed, please install it from https://git-scm.com/)
