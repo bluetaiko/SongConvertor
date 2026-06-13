@@ -319,7 +319,7 @@ public partial class MainForm : Form
                 textBoxes.Clear();
                 selectedKey = null;
 
-                if (e.Node.Tag is string tag && tag == "common")
+                if (e.Node?.Tag is string tag && tag == "common")
                 {
                     // 共通画像設定ノードが選択された場合
                     selectedLabel.Text = "共通画像設定";
