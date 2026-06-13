@@ -137,7 +137,15 @@ public class DanGeneratorCore
         public List<string> Ranks { get; set; } = new List<string>();
     }
 
-    public static async Task GenerateAsync(string inputSource, string outputDir, string songsFolder = "", string filter = "", Action<string>? logAction = null, Dictionary<string, string>? plateMap = null, Dictionary<string, string>? otherImageMap = null, int? danIndexOverride = null, CancellationToken ct = default)
+    public class DanImageSettings
+    {
+        public string? PlatePath { get; set; }
+        public string? PanelSidePath { get; set; }
+        public string? TitlePlatePath { get; set; }
+        public string? MiniPlatePath { get; set; }
+    }
+
+    public static async Task GenerateAsync(string inputSource, string outputDir, string songsFolder = "", string filter = "", Action<string>? logAction = null, DanImageSettings? commonImageSettings = null, Dictionary<string, DanImageSettings>? danImageSettings = null, int? danIndexOverride = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         if (!Directory.Exists(outputDir)) Directory.CreateDirectory(outputDir);
@@ -530,12 +538,22 @@ public class DanGeneratorCore
                 string rankFolder = Path.Combine(setBaseFolder, $"{prefix} {safeRankName}");
                 if (!Directory.Exists(rankFolder)) Directory.CreateDirectory(rankFolder);
 
+                // 段位ごとの設定または共通設定を取得
+                DanImageSettings? settings = null;
+                if (danImageSettings != null && danImageSettings.TryGetValue(detectedRank, out var danSettings))
+                {
+                    settings = danSettings;
+                }
+                else if (commonImageSettings != null)
+                {
+                    settings = commonImageSettings;
+                }
+
                 // Plate画像のコピー処理
                 string? chosenPlatePath = null;
-                if (plateMap != null)
+                if (settings != null && !string.IsNullOrEmpty(settings.PlatePath) && File.Exists(settings.PlatePath))
                 {
-                    if (plateMap.TryGetValue(detectedRank, out var p) && File.Exists(p)) chosenPlatePath = p;
-                    else if (plateMap.TryGetValue("*", out var def) && File.Exists(def)) chosenPlatePath = def;
+                    chosenPlatePath = settings.PlatePath;
                 }
 
                 if (chosenPlatePath != null)
@@ -554,31 +572,31 @@ public class DanGeneratorCore
                 }
 
                 // Plate以外の画像のコピー処理
-                if (otherImageMap != null)
+                if (settings != null)
                 {
-                    var otherImageMappings = new Dictionary<string, string>
+                    var otherImageMappings = new List<(string? path, string fileName)>
                     {
-                        { "danPanelSidePath", "PanelSide.png" },
-                        { "danTitlePlatePath", "TitlePlate.png" },
-                        { "danMiniPlatePath", "MiniPlate.png" }
+                        (settings.PanelSidePath, "PanelSide.png"),
+                        (settings.TitlePlatePath, "TitlePlate.png"),
+                        (settings.MiniPlatePath, "MiniPlate.png")
                     };
 
-                    foreach (var mapping in otherImageMappings)
+                    foreach (var (path, fileName) in otherImageMappings)
                     {
-                        if (otherImageMap.TryGetValue(mapping.Key, out var imagePath) && File.Exists(imagePath))
+                        if (!string.IsNullOrEmpty(path) && File.Exists(path))
                         {
-                            File.Copy(imagePath, Path.Combine(rankFolder, mapping.Value), true);
+                            File.Copy(path, Path.Combine(rankFolder, fileName), true);
                             // DanCourseクラスにこれらのプロパティがある場合は設定
-                            switch (mapping.Key)
+                            switch (fileName)
                             {
-                                case "danPanelSidePath":
-                                    dan.danPanelSidePath = mapping.Value;
+                                case "PanelSide.png":
+                                    dan.danPanelSidePath = fileName;
                                     break;
-                                case "danTitlePlatePath":
-                                    dan.danTitlePlatePath = mapping.Value;
+                                case "TitlePlate.png":
+                                    dan.danTitlePlatePath = fileName;
                                     break;
-                                case "danMiniPlatePath":
-                                    dan.danMiniPlatePath = mapping.Value;
+                                case "MiniPlate.png":
+                                    dan.danMiniPlatePath = fileName;
                                     break;
                             }
                         }

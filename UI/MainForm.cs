@@ -25,8 +25,10 @@ public partial class MainForm : Form
     private Button? _btnCategorySelect;
     private Button? _btnImageSelect;
     private Button? _btnConvertAssetSelect;
-    private readonly Dictionary<string, string> _plateAssignments = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _otherImageAssignments = new(StringComparer.OrdinalIgnoreCase);
+    // 共通画像設定
+    private readonly Core.DanGeneratorCore.DanImageSettings _commonImageSettings = new();
+    // 段位ごとの画像設定
+    private readonly Dictionary<string, Core.DanGeneratorCore.DanImageSettings> _danImageSettings = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _convertAssetAssignments = new(StringComparer.OrdinalIgnoreCase);
     private ToolStripStatusLabel? _cancelStatusLink;
     private CancellationTokenSource? _operationCts;
@@ -61,10 +63,14 @@ public partial class MainForm : Form
         txtDanOutputFolder.TextChanged += (s, e) => SaveSettings();
         txtDanConvertOutputFolder.TextChanged += (s, e) => SaveSettings();
         txtWikiUrl.TextChanged += (s, e) =>
-        {
-            _plateAssignments.Clear();
-            SaveSettings();
-        };
+            {
+                _commonImageSettings.PlatePath = null;
+                _commonImageSettings.PanelSidePath = null;
+                _commonImageSettings.TitlePlatePath = null;
+                _commonImageSettings.MiniPlatePath = null;
+                _danImageSettings.Clear();
+                SaveSettings();
+            };
         
         // Operations
         btnOrganize.Click += async (s, e) => await OnOrganizeClick();
@@ -339,31 +345,50 @@ public partial class MainForm : Form
                             ForeColor = Color.White 
                         };
                         
+                        // 現在の値を取得
+                        string? currentValue = key switch
+                        {
+                            "danPlatePath" => _commonImageSettings.PlatePath,
+                            "danPanelSidePath" => _commonImageSettings.PanelSidePath,
+                            "danTitlePlatePath" => _commonImageSettings.TitlePlatePath,
+                            "danMiniPlatePath" => _commonImageSettings.MiniPlatePath,
+                            _ => null
+                        };
+
                         var txt = new TextBox 
                         { 
-                            Text = key == "danPlatePath" 
-                                ? _plateAssignments.GetValueOrDefault("*") ?? "" 
-                                : _otherImageAssignments.GetValueOrDefault(key) ?? "", 
+                            Text = currentValue ?? "", 
                             Location = new Point(105, 7), 
-                            Width = 170,
+                            Width = 120,
                             ReadOnly = true,
                             BackColor = Color.FromArgb(60, 60, 60),
                             ForeColor = Color.White
                         };
                         
-                        var btn = new Button 
+                        var btnBrowse = new Button 
                         { 
                             Text = "参照", 
-                            Location = new Point(280, 4), 
-                            Width = 70, 
+                            Location = new Point(230, 4), 
+                            Width = 55, 
                             Height = 25,
                             BackColor = Color.FromArgb(0, 122, 204),
                             ForeColor = Color.White,
                             FlatStyle = FlatStyle.Flat
                         };
                         
+                        var btnClear = new Button
+                        {
+                            Text = "クリア",
+                            Location = new Point(290, 4),
+                            Width = 55,
+                            Height = 25,
+                            BackColor = Color.FromArgb(200, 50, 50),
+                            ForeColor = Color.White,
+                            FlatStyle = FlatStyle.Flat
+                        };
+                        
                         var keyCapture = key;
-                        btn.Click += (s, e) =>
+                        btnBrowse.Click += (s, e) =>
                         {
                             using var ofd = new OpenFileDialog
                             {
@@ -373,20 +398,48 @@ public partial class MainForm : Form
                             if (ofd.ShowDialog(dialog) == DialogResult.OK)
                             {
                                 txt.Text = ofd.FileName;
-                                if (keyCapture == "danPlatePath")
+                                switch (keyCapture)
                                 {
-                                    _plateAssignments["*"] = ofd.FileName;
+                                    case "danPlatePath":
+                                        _commonImageSettings.PlatePath = ofd.FileName;
+                                        break;
+                                    case "danPanelSidePath":
+                                        _commonImageSettings.PanelSidePath = ofd.FileName;
+                                        break;
+                                    case "danTitlePlatePath":
+                                        _commonImageSettings.TitlePlatePath = ofd.FileName;
+                                        break;
+                                    case "danMiniPlatePath":
+                                        _commonImageSettings.MiniPlatePath = ofd.FileName;
+                                        break;
                                 }
-                                else
-                                {
-                                    _otherImageAssignments[keyCapture] = ofd.FileName;
-                                }
+                            }
+                        };
+                        
+                        btnClear.Click += (s, e) =>
+                        {
+                            txt.Text = "";
+                            switch (keyCapture)
+                            {
+                                case "danPlatePath":
+                                    _commonImageSettings.PlatePath = null;
+                                    break;
+                                case "danPanelSidePath":
+                                    _commonImageSettings.PanelSidePath = null;
+                                    break;
+                                case "danTitlePlatePath":
+                                    _commonImageSettings.TitlePlatePath = null;
+                                    break;
+                                case "danMiniPlatePath":
+                                    _commonImageSettings.MiniPlatePath = null;
+                                    break;
                             }
                         };
                         
                         row.Controls.Add(lbl);
                         row.Controls.Add(txt);
-                        row.Controls.Add(btn);
+                        row.Controls.Add(btnBrowse);
+                        row.Controls.Add(btnClear);
                         imageListPanel.Controls.Add(row);
                         textBoxes[key] = txt;
                     }
@@ -394,11 +447,18 @@ public partial class MainForm : Form
                     imageListPanel.Visible = true;
                     imageListPanel.BringToFront();
                 }
-                else if (e.Node.Tag is ImageNodeData data && data.Type == "plate")
+                else if (e.Node?.Tag is ImageNodeData data && data.Type == "plate")
                 {
                     // 段位ノードが選択された場合
                     selectedLabel.Text = data.DisplayName;
                     selectedKey = data.RankKey;
+
+                    // 段位の設定を取得（なければ作成）
+                    if (!_danImageSettings.TryGetValue(data.RankKey, out var danSettings))
+                    {
+                        danSettings = new Core.DanGeneratorCore.DanImageSettings();
+                        _danImageSettings[data.RankKey] = danSettings;
+                    }
 
                     // 段位用の一覧を作成（Plate + 共通画像）
                     var rankAssets = new[]
@@ -422,32 +482,51 @@ public partial class MainForm : Form
                             ForeColor = Color.White 
                         };
                         
+                        // 現在の値を取得
+                        string? currentValue = key switch
+                        {
+                            "plate" => danSettings.PlatePath,
+                            "danPanelSidePath" => danSettings.PanelSidePath,
+                            "danTitlePlatePath" => danSettings.TitlePlatePath,
+                            "danMiniPlatePath" => danSettings.MiniPlatePath,
+                            _ => null
+                        };
+
                         var txt = new TextBox 
                         { 
-                            Text = key == "plate" 
-                                ? _plateAssignments.GetValueOrDefault(data.RankKey) ?? "" 
-                                : _otherImageAssignments.GetValueOrDefault(key) ?? "", 
+                            Text = currentValue ?? "", 
                             Location = new Point(105, 7), 
-                            Width = 170,
+                            Width = 120,
                             ReadOnly = true,
                             BackColor = Color.FromArgb(60, 60, 60),
                             ForeColor = Color.White
                         };
                         
-                        var btn = new Button 
+                        var btnBrowse = new Button 
                         { 
                             Text = "参照", 
-                            Location = new Point(280, 4), 
-                            Width = 70, 
+                            Location = new Point(230, 4), 
+                            Width = 55, 
                             Height = 25,
                             BackColor = Color.FromArgb(0, 122, 204),
                             ForeColor = Color.White,
                             FlatStyle = FlatStyle.Flat
                         };
                         
+                        var btnClear = new Button
+                        {
+                            Text = "クリア",
+                            Location = new Point(290, 4),
+                            Width = 55,
+                            Height = 25,
+                            BackColor = Color.FromArgb(200, 50, 50),
+                            ForeColor = Color.White,
+                            FlatStyle = FlatStyle.Flat
+                        };
+                        
                         var keyCapture = key;
                         var rankKeyCapture = data.RankKey;
-                        btn.Click += (s, e) =>
+                        btnBrowse.Click += (s, e) =>
                         {
                             using var ofd = new OpenFileDialog
                             {
@@ -457,20 +536,60 @@ public partial class MainForm : Form
                             if (ofd.ShowDialog(dialog) == DialogResult.OK)
                             {
                                 txt.Text = ofd.FileName;
-                                if (keyCapture == "plate")
+                                // 最新の設定を取得
+                                if (!_danImageSettings.TryGetValue(rankKeyCapture, out var currentSettings))
                                 {
-                                    _plateAssignments[rankKeyCapture] = ofd.FileName;
+                                    currentSettings = new Core.DanGeneratorCore.DanImageSettings();
+                                    _danImageSettings[rankKeyCapture] = currentSettings;
                                 }
-                                else
+                                switch (keyCapture)
                                 {
-                                    _otherImageAssignments[keyCapture] = ofd.FileName;
+                                    case "plate":
+                                        currentSettings.PlatePath = ofd.FileName;
+                                        break;
+                                    case "danPanelSidePath":
+                                        currentSettings.PanelSidePath = ofd.FileName;
+                                        break;
+                                    case "danTitlePlatePath":
+                                        currentSettings.TitlePlatePath = ofd.FileName;
+                                        break;
+                                    case "danMiniPlatePath":
+                                        currentSettings.MiniPlatePath = ofd.FileName;
+                                        break;
                                 }
+                            }
+                        };
+                        
+                        btnClear.Click += (s, e) =>
+                        {
+                            txt.Text = "";
+                            // 最新の設定を取得
+                            if (!_danImageSettings.TryGetValue(rankKeyCapture, out var currentSettings))
+                            {
+                                currentSettings = new Core.DanGeneratorCore.DanImageSettings();
+                                _danImageSettings[rankKeyCapture] = currentSettings;
+                            }
+                            switch (keyCapture)
+                            {
+                                case "plate":
+                                    currentSettings.PlatePath = null;
+                                    break;
+                                case "danPanelSidePath":
+                                    currentSettings.PanelSidePath = null;
+                                    break;
+                                case "danTitlePlatePath":
+                                    currentSettings.TitlePlatePath = null;
+                                    break;
+                                case "danMiniPlatePath":
+                                    currentSettings.MiniPlatePath = null;
+                                    break;
                             }
                         };
                         
                         row.Controls.Add(lbl);
                         row.Controls.Add(txt);
-                        row.Controls.Add(btn);
+                        row.Controls.Add(btnBrowse);
+                        row.Controls.Add(btnClear);
                         imageListPanel.Controls.Add(row);
                         textBoxes[key] = txt;
                     }
@@ -614,7 +733,7 @@ public partial class MainForm : Form
             selectedLabel.Text = "項目を選択してください";
             imageListPanel.Visible = false;
 
-            if (e.Node.Tag is string tag && tag == "common")
+            if (e.Node?.Tag is string tag && tag == "common")
             {
                 // 全体設定ノードが選択された場合
                 selectedLabel.Text = "全体設定";
@@ -639,25 +758,36 @@ public partial class MainForm : Form
                     {
                         Text = _convertAssetAssignments.GetValueOrDefault(key) ?? "",
                         Location = new Point(105, 7),
-                        Width = 170,
+                        Width = 120,
                         ReadOnly = true,
                         BackColor = Color.FromArgb(60, 60, 60),
                         ForeColor = Color.White
                     };
 
-                    var btn = new Button
+                    var btnBrowse = new Button
                     {
                         Text = "参照",
-                        Location = new Point(280, 4),
-                        Width = 70,
+                        Location = new Point(230, 4),
+                        Width = 55,
                         Height = 25,
                         BackColor = Color.FromArgb(0, 122, 204),
                         ForeColor = Color.White,
                         FlatStyle = FlatStyle.Flat
                     };
 
+                    var btnClear = new Button
+                    {
+                        Text = "クリア",
+                        Location = new Point(290, 4),
+                        Width = 55,
+                        Height = 25,
+                        BackColor = Color.FromArgb(200, 50, 50),
+                        ForeColor = Color.White,
+                        FlatStyle = FlatStyle.Flat
+                    };
+
                     var keyCapture = key;
-                    btn.Click += (s, e) =>
+                    btnBrowse.Click += (s, e) =>
                     {
                         using var ofd = new OpenFileDialog
                         {
@@ -671,9 +801,16 @@ public partial class MainForm : Form
                         }
                     };
 
+                    btnClear.Click += (s, e) =>
+                    {
+                        txt.Text = "";
+                        _convertAssetAssignments.Remove(keyCapture);
+                    };
+
                     row.Controls.Add(lbl);
                     row.Controls.Add(txt);
-                    row.Controls.Add(btn);
+                    row.Controls.Add(btnBrowse);
+                    row.Controls.Add(btnClear);
                     imageListPanel.Controls.Add(row);
                 }
             }
@@ -985,15 +1122,15 @@ public partial class MainForm : Form
         {
             int? danIndex = int.TryParse(txtDanGeneratorIndex.Text, out int idx) ? idx : null;
             await DanGeneratorCore.GenerateAsync(
-                txtWikiUrl.Text,
-                txtDanOutputFolder.Text,
-                txtDanSongsPath.Text,
-                txtWikiFilter.Text,
-                Log,
-                _plateAssignments,
-                _otherImageAssignments,
-                danIndex,
-                ct);
+                        txtWikiUrl.Text,
+                        txtDanOutputFolder.Text,
+                        txtDanSongsPath.Text,
+                        txtWikiFilter.Text,
+                        Log,
+                        _commonImageSettings,
+                        _danImageSettings,
+                        danIndex,
+                        ct);
 
             Log(LanguageManager.GetString("DanGenerateDone"));
             Log(string.Format(LanguageManager.GetString("OutputFolder") + " {0}", txtDanOutputFolder.Text));
@@ -1328,31 +1465,51 @@ public partial class MainForm : Form
 
     private void SaveSettings()
     {
-        var settings = new AppSettings
+        try
         {
-            AddSongsFolder = txtAddSongsFolder.Text,
-            TempSongs = txtTempSongs.Text,
-            TaikoRoot = txtTaikoRoot.Text,
-            DanSongsPath = txtDanSongsPath.Text,
-            DanConvertSimu = "", // 記憶しない
-            WikiUrl = txtWikiUrl.Text,
-            DanOutputFolder = txtDanOutputFolder.Text,
-            DanConvertOutputFolder = txtDanConvertOutputFolder.Text,
-            WikiFilter = "", // 記憶しない
-            TjaFile = "", // 記憶しない
-            DanGeneratorIndex = "", // 記憶しない
-            DanConvertorIndex = txtDanConvertorIndex.Text,
-            DanMiniPlateText = txtDanMiniPlateText.Text,
-            SelectedCategoriesCsv = string.Join("|", GetSelectedSourceCategories()),
-            ConvertAssetsJson = JsonSerializer.Serialize(_convertAssetAssignments),
-            PlateAssignments = _plateAssignments,
-            OtherImagesJson = JsonSerializer.Serialize(_otherImageAssignments),
-            Language = LanguageManager.CurrentLanguage.ToString()
-        };
+            // 共通設定をシリアル化
+            var commonJson = JsonSerializer.Serialize(_commonImageSettings);
 
-        var json = JsonSerializer.Serialize(settings);
-        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
-        File.WriteAllText(SettingsPath, json, Utf8NoBom);
+            // 段位ごとの設定をシリアル化
+            var danJson = JsonSerializer.Serialize(_danImageSettings);
+
+            var settings = new AppSettings
+            {
+                AddSongsFolder = txtAddSongsFolder.Text,
+                TempSongs = txtTempSongs.Text,
+                TaikoRoot = txtTaikoRoot.Text,
+                DanSongsPath = txtDanSongsPath.Text,
+                DanConvertSimu = "", // 記憶しない
+                WikiUrl = txtWikiUrl.Text,
+                DanOutputFolder = txtDanOutputFolder.Text,
+                DanConvertOutputFolder = txtDanConvertOutputFolder.Text,
+                WikiFilter = "", // 記憶しない
+                TjaFile = "", // 記憶しない
+                DanGeneratorIndex = "", // 記憶しない
+                DanConvertorIndex = txtDanConvertorIndex.Text,
+                DanMiniPlateText = txtDanMiniPlateText.Text,
+                SelectedCategoriesCsv = string.Join("|", GetSelectedSourceCategories()),
+                ConvertAssetsJson = JsonSerializer.Serialize(_convertAssetAssignments),
+                // 旧バージョン互換性のため残しておく（空で保存）
+                PlateAssignments = new Dictionary<string, string>(),
+                OtherImagesJson = "",
+                // 新しいデータ構造
+                CommonImageSettingsJson = commonJson,
+                DanImageSettingsJson = danJson,
+                Language = LanguageManager.CurrentLanguage.ToString()
+            };
+
+            var json = JsonSerializer.Serialize(settings);
+            var dir = Path.GetDirectoryName(SettingsPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            File.WriteAllText(SettingsPath, json, Utf8NoBom);
+        }
+        catch
+        {
+        }
     }
 
     private void ChangeLanguage(Language lang)
@@ -1428,13 +1585,19 @@ public partial class MainForm : Form
 
     private void LoadSettings()
     {
-        if (!File.Exists(SettingsPath)) return;
+        if (!File.Exists(SettingsPath))
+        {
+            return;
+        }
 
         try
         {
             var json = ReadTextWithFallback(SettingsPath);
             var settings = JsonSerializer.Deserialize<AppSettings>(json);
-            if (settings == null) return;
+            if (settings == null)
+            {
+                return;
+            }
 
             txtAddSongsFolder.Text = settings.AddSongsFolder ?? "";
             txtTempSongs.Text = settings.TempSongs ?? "";
@@ -1482,23 +1645,123 @@ public partial class MainForm : Form
                 }
             }
 
-            if (settings.PlateAssignments != null && settings.PlateAssignments.Count > 0)
+            // 新しいデータ構造で読み込み
+            bool loadedNew = false;
+            if (!string.IsNullOrEmpty(settings.CommonImageSettingsJson))
             {
-                _plateAssignments.Clear();
-                foreach (var kvp in settings.PlateAssignments) _plateAssignments[kvp.Key] = kvp.Value;
-            }
-
-            if (!string.IsNullOrEmpty(settings.OtherImagesJson))
-            {
-                var otherImages = JsonSerializer.Deserialize<Dictionary<string, string>>(settings.OtherImagesJson);
-                if (otherImages != null)
+                try
                 {
-                    _otherImageAssignments.Clear();
-                    foreach (var kvp in otherImages) _otherImageAssignments[kvp.Key] = kvp.Value;
+                    var common = JsonSerializer.Deserialize<Core.DanGeneratorCore.DanImageSettings>(settings.CommonImageSettingsJson);
+                    if (common != null)
+                    {
+                        _commonImageSettings.PlatePath = common.PlatePath;
+                        _commonImageSettings.PanelSidePath = common.PanelSidePath;
+                        _commonImageSettings.TitlePlatePath = common.TitlePlatePath;
+                        _commonImageSettings.MiniPlatePath = common.MiniPlatePath;
+                    }
+                }
+                catch
+                {
                 }
             }
+
+            if (!string.IsNullOrEmpty(settings.DanImageSettingsJson))
+            {
+                try
+                {
+                    var danSettings = JsonSerializer.Deserialize<Dictionary<string, Core.DanGeneratorCore.DanImageSettings>>(settings.DanImageSettingsJson);
+                    if (danSettings != null)
+                    {
+                        _danImageSettings.Clear();
+                        foreach (var kvp in danSettings)
+                        {
+                            _danImageSettings[kvp.Key] = kvp.Value;
+                        }
+                        loadedNew = true;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            // 旧バージョンの設定から移行（新しい設定が読み込めなかった場合）
+            if (!loadedNew)
+            {
+                // 旧 PlateAssignments から移行
+                if (settings.PlateAssignments != null && settings.PlateAssignments.Count > 0)
+                {
+                    foreach (var kvp in settings.PlateAssignments)
+                    {
+                        if (kvp.Key == "*")
+                        {
+                            _commonImageSettings.PlatePath = kvp.Value;
+                        }
+                        else
+                        {
+                            if (!_danImageSettings.TryGetValue(kvp.Key, out var danSettings))
+                            {
+                                danSettings = new Core.DanGeneratorCore.DanImageSettings();
+                                _danImageSettings[kvp.Key] = danSettings;
+                            }
+                            danSettings.PlatePath = kvp.Value;
+                        }
+                    }
+                }
+
+                // 旧 OtherImagesJson から移行（共通設定として）
+                if (!string.IsNullOrEmpty(settings.OtherImagesJson))
+                {
+                    try
+                    {
+                        var otherImages = JsonSerializer.Deserialize<Dictionary<string, string>>(settings.OtherImagesJson);
+                        if (otherImages != null && otherImages.Count > 0)
+                        {
+                            if (otherImages.TryGetValue("danPlatePath", out var platePath))
+                                _commonImageSettings.PlatePath = platePath;
+                            if (otherImages.TryGetValue("danPanelSidePath", out var panelSidePath))
+                                _commonImageSettings.PanelSidePath = panelSidePath;
+                            if (otherImages.TryGetValue("danTitlePlatePath", out var titlePlatePath))
+                                _commonImageSettings.TitlePlatePath = titlePlatePath;
+                            if (otherImages.TryGetValue("danMiniPlatePath", out var miniPlatePath))
+                                _commonImageSettings.MiniPlatePath = miniPlatePath;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                // ConvertAssetsJson からも共通設定に移行（OtherImagesJson が空の場合）
+                if (string.IsNullOrEmpty(_commonImageSettings.PlatePath) && !string.IsNullOrEmpty(settings.ConvertAssetsJson))
+                {
+                    try
+                    {
+                        var convertAssets = JsonSerializer.Deserialize<Dictionary<string, string>>(settings.ConvertAssetsJson);
+                        if (convertAssets != null)
+                        {
+                            if (convertAssets.TryGetValue("danPlatePath", out var platePath))
+                                _commonImageSettings.PlatePath = platePath;
+                            if (convertAssets.TryGetValue("danPanelSidePath", out var panelSidePath))
+                                _commonImageSettings.PanelSidePath = panelSidePath;
+                            if (convertAssets.TryGetValue("danTitlePlatePath", out var titlePlatePath))
+                                _commonImageSettings.TitlePlatePath = titlePlatePath;
+                            if (convertAssets.TryGetValue("danMiniPlatePath", out var miniPlatePath))
+                                _commonImageSettings.MiniPlatePath = miniPlatePath;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                // 移行が完了したら新しい形式で保存
+                SaveSettings();
+            }
         }
-        catch { }
+        catch
+        {
+        }
     }
 
     private static string ReadTextWithFallback(string path)
@@ -1532,9 +1795,15 @@ public partial class MainForm : Form
         public string SelectedCategoriesCsv { get; set; } = "";
         public string ConvertAssetsJson { get; set; } = "";
         public string Language { get; set; } = "";
+        // 旧バージョン互換性のため残しておく
         public Dictionary<string, string> PlateAssignments { get; set; } = new Dictionary<string, string>();
         public string OtherImagesJson { get; set; } = "";
+        // 新しいデータ構造
+        public string CommonImageSettingsJson { get; set; } = "";
+        public string DanImageSettingsJson { get; set; } = "";
     }
+
+
 
     private async Task CheckForUpdateOnStartupAsync()
     {
