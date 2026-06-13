@@ -782,26 +782,47 @@ public class DanGeneratorCore
         
         var targetVariants = NormalizationUtils.ExpandTitleMatchKeys(normalizedTarget).ToList();
         
+        string? bestMatch = null;
+        int bestScore = int.MinValue; // スコアが高い方が良い
+        
         foreach (var dir in dirs)
         {
             string dirName = Path.GetFileName(dir);
             string normalizedDirName = NormalizationUtils.NormalizeTitle(dirName);
             var dirVariants = NormalizationUtils.ExpandTitleMatchKeys(normalizedDirName).ToList();
             
-            // 1. 完全一致（ターゲットとディレクトリのバリアントでチェック）
+            int currentScore = int.MinValue;
+            
+            // 1. 完全一致（最も高い優先度）
             if (targetVariants.Any(tv => dirVariants.Any(dv => dv.Equals(tv, StringComparison.OrdinalIgnoreCase))))
-                return dir;
-                
-            // 2. 後方一致
-            if (targetVariants.Any(tv => dirVariants.Any(dv => dv.EndsWith(tv, StringComparison.OrdinalIgnoreCase))))
-                return dir;
-                
-            // 3. 部分一致
-            if (targetVariants.Any(tv => dirVariants.Any(dv => dv.Contains(tv, StringComparison.OrdinalIgnoreCase))))
-                return dir;
+            {
+                currentScore = 1000;
+            }
+            // 2. 前方一致
+            else if (targetVariants.Any(tv => dirVariants.Any(dv => dv.StartsWith(tv, StringComparison.OrdinalIgnoreCase))))
+            {
+                currentScore = 500;
+            }
+            // 3. 後方一致
+            else if (targetVariants.Any(tv => dirVariants.Any(dv => dv.EndsWith(tv, StringComparison.OrdinalIgnoreCase))))
+            {
+                currentScore = 250;
+            }
+            // 4. 部分一致
+            else if (targetVariants.Any(tv => dirVariants.Any(dv => dv.Contains(tv, StringComparison.OrdinalIgnoreCase))))
+            {
+                currentScore = 100;
+            }
+            
+            // 同じスコアの場合は、ディレクトリ名が短い方を優先
+            if (currentScore > bestScore || (currentScore == bestScore && bestMatch != null && dirName.Length < Path.GetFileName(bestMatch).Length))
+            {
+                bestScore = currentScore;
+                bestMatch = dir;
+            }
         }
 
-        return null;
+        return bestMatch;
     }
 
     private static void ParseConditionsFromAbsCells(List<(Dictionary<int, HtmlNode> absCells, HtmlNode row)> songRowsInfo, Dictionary<int, string> relativeColMap, DanCourse dan, string[] excludeKeywords)
@@ -987,13 +1008,13 @@ public class DanGeneratorCore
     {
         color = color.ToLower();
         if (color.Contains("#ff7028")) return "ナムコオリジナル";
-        if (color.Contains("#4aaaba")) return "アニメ";
-        if (color.Contains("#9966cc")) return "ボーカロイド™曲";
-        if (color.Contains("#0099ff")) return "ゲームミュージック";
-        if (color.Contains("#ffbb00") || color.Contains("#ded523")) return "バラエティ";
-        if (color.Contains("#bda600")) return "クラシック";
-        if (color.Contains("#ff4400")) return "ポップス";
-        if (color.Contains("#ff66ff")) return "キッズ";
+        if (color.Contains("#fe90d2") || color.Contains("#fe9800")) return "アニメ";
+        if (color.Contains("#cbcfde")) return "ボーカロイド™曲";
+        if (color.Contains("#cc8aeb")) return "ゲームミュージック";
+        if (color.Contains("#0acc2a")) return "バラエティ";
+        if (color.Contains("#ded523") || color.Contains("#ff619d")) return "クラシック";
+        if (color.Contains("#49d5eb")) return "ポップス";
+        if (color.Contains("#fdc000")) return "キッズ";
         return "ナムコオリジナル";
     }
 
