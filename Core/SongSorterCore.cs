@@ -13,7 +13,7 @@ public sealed record SongSortRunResult(
     int TotalUnmatched,
     string ReportPath)
 {
-    public string Summary => $"整理完了: コピー {TotalCopied} / スキップ {TotalSkipped} / 未一致 {TotalUnmatched}";
+    public string Summary => $"整理完了: コピー {TotalCopied} / スキップ {TotalSkipped}";
 }
 
 public sealed record SongSortReportRow(
@@ -54,8 +54,8 @@ public static class SongSorterCore
         CancellationToken ct = default,
         Action<SongSortProgress>? progressAction = null)
     {
-        var exeDir = AppDomain.CurrentDomain.BaseDirectory;
-        var exportDir = Path.Combine(exeDir, "Export");
+        var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SongConverter");
+        var exportDir = Path.Combine(appDataDir, "Export");
         if (!Directory.Exists(exportDir))
             throw new InvalidOperationException("Exportフォルダが見つかりません。先に「譜面リスト更新」を実行してください。");
 
@@ -375,27 +375,28 @@ public static class SongSorterCore
         var result = new Dictionary<string, Dictionary<string, List<(string SubtitleNorm, int Index, string DisplayTitle, string DisplaySubtitle)>>>(StringComparer.OrdinalIgnoreCase);
         foreach (var cat in SongListBase.Categories)
         {
-            var filePath = Path.Combine(exportDir, $"songlist_{cat.DisplayName}.txt");
+            // .php を .txt に置き換えてファイル名を生成
+            var filePath = Path.Combine(exportDir, cat.FileName.Replace(".php", ".txt"));
             if (!File.Exists(filePath)) continue;
 
             var songsByTitle = new Dictionary<string, List<(string SubtitleNorm, int Index, string DisplayTitle, string DisplaySubtitle)>>(StringComparer.Ordinal);
+            int index = 0;
             foreach (var line in ReadAllLinesWithFallback(filePath))
             {
                 var parts = line.Split('\t');
                 if (parts.Length < 2) continue;
-                var idStr = parts[0];
-                var title = parts[1];
+                var title = parts[0];
                 var subtitle = parts.Length > 2 ? parts[2] : "";
 
                 var titleNorm = NormalizationUtils.NormalizeTitle(title);
                 var subNorm = NormalizationUtils.NormalizeSubtitle(subtitle);
-                var idx = int.TryParse(idStr, out var n) ? n : 0;
 
                 foreach (var key in NormalizationUtils.ExpandTitleMatchKeys(titleNorm))
                 {
                     if (!songsByTitle.TryGetValue(key, out var v)) { v = new(); songsByTitle[key] = v; }
-                    v.Add((subNorm, idx, title, subtitle));
+                    v.Add((subNorm, index, title, subtitle));
                 }
+                index++;
             }
             result[cat.FileName] = songsByTitle;
         }
@@ -491,7 +492,7 @@ public static class SongSorterCore
 
     private static string WriteReportCsv(string exportDir, string runId, IEnumerable<SongSortReportRow> rows)
     {
-        var reportPath = Path.Combine(exportDir, $"songsort_report_{runId}.csv");
+        var reportPath = Path.Combine(exportDir, "log.txt");
         var ordered = rows
             .OrderBy(r => r.SourceCategory, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.SongDirectory, StringComparer.OrdinalIgnoreCase);

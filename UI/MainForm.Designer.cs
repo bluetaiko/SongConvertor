@@ -19,6 +19,7 @@ partial class MainForm
         this.menuLanguage = new System.Windows.Forms.ToolStripMenuItem();
         this.menuJapanese = new System.Windows.Forms.ToolStripMenuItem();
         this.menuEnglish = new System.Windows.Forms.ToolStripMenuItem();
+        this.menuCheckUpdate = new System.Windows.Forms.ToolStripMenuItem();
         this.splitContainer = new System.Windows.Forms.SplitContainer();
         this.tabControl = new System.Windows.Forms.TabControl();
         this.tabAddSongs = new System.Windows.Forms.TabPage();
@@ -93,12 +94,19 @@ partial class MainForm
         this.menuStrip.SuspendLayout();
         this.SuspendLayout();
 
+        this.menuCheckUpdate = new System.Windows.Forms.ToolStripMenuItem();
+        
         // menuStrip
-        this.menuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.menuLanguage });
+        this.menuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] { this.menuLanguage, this.menuCheckUpdate });
         this.menuStrip.Location = new System.Drawing.Point(0, 0);
         this.menuStrip.Name = "menuStrip";
         this.menuStrip.Size = new System.Drawing.Size(800, 24);
         this.menuStrip.TabIndex = 3;
+        
+        // menuCheckUpdate
+        this.menuCheckUpdate.Name = "menuCheckUpdate";
+        this.menuCheckUpdate.Text = "アップデートを確認";
+        this.menuCheckUpdate.Click += MenuCheckUpdate_Click;
 
         // splitContainer
         this.splitContainer.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -484,6 +492,7 @@ partial class MainForm
     private System.Windows.Forms.ToolStripMenuItem menuLanguage;
     private System.Windows.Forms.ToolStripMenuItem menuJapanese;
     private System.Windows.Forms.ToolStripMenuItem menuEnglish;
+    private System.Windows.Forms.ToolStripMenuItem menuCheckUpdate;
     private System.Windows.Forms.TabPage tabSongSorter;
     private System.Windows.Forms.TabPage tabDanGenerator;
     private System.Windows.Forms.TabPage tabAddSongs;

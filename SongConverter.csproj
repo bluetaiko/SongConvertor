@@ -8,6 +8,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>SongConverter.ico</ApplicationIcon>
     <Configurations>Debug;Release;Test</Configurations>
+    <Version>1.0.6</Version>
+    <AssemblyVersion>1.0.6.0</AssemblyVersion>
+    <FileVersion>1.0.6.0</FileVersion>
   </PropertyGroup>
   
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Test|AnyCPU'">

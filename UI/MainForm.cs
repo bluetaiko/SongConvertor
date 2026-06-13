@@ -41,6 +41,9 @@ public partial class MainForm : Form
         ApplyLocalization();
         logBox.Text = LanguageManager.GetString("Ready") + Environment.NewLine;
         
+        // 起動時にアップデートチェックを非同期で実行
+        this.Load += async (s, e) => await CheckForUpdateOnStartupAsync();
+        
         // Browsing
         btnBrowseAddSongsFolder.Click += (s, e) => BrowseFolder(txtAddSongsFolder);
         btnBrowseTemp.Click += (s, e) => BrowseFolder(txtTempSongs);
@@ -547,8 +550,10 @@ public partial class MainForm : Form
 
         try
         {
-            var exportDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Export");
+            var appDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SongConverter");
+            var exportDir = Path.Combine(appDataDir, "Export");
             var categoryMap = GetCategoryMap();
+            Directory.CreateDirectory(appDataDir);
             Directory.CreateDirectory(exportDir);
 
             foreach (var cat in categoryMap)
@@ -603,21 +608,19 @@ public partial class MainForm : Form
         Log(LanguageManager.GetString("StartOrganize"));
 
         try
-        {
-            var runId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var result = await Task.Run(() => 
-                SongSorterCore.OrganizeSongsDetailed(
-                    txtTempSongs.Text, 
-                    txtTaikoRoot.Text, 
-                    runId, 
-                    GetSelectedSourceCategories(), 
-                    Log, 
-                    ct), ct);
+            {
+                var runId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                var result = await Task.Run(() => 
+                    SongSorterCore.OrganizeSongsDetailed(
+                        txtTempSongs.Text, 
+                        txtTaikoRoot.Text, 
+                        runId, 
+                        GetSelectedSourceCategories(), 
+                        Log, 
+                        ct), ct);
 
-            Log(result.Summary);
-            Log(string.Format(LanguageManager.GetString("Done") + ": {0}", result.ReportPath));
-            MessageBox.Show($"{result.Summary}\n\n{result.ReportPath}", LanguageManager.GetString("Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
+                Log(result.Summary);
+            }
         catch (OperationCanceledException)
         {
             Log(LanguageManager.GetString("UserCancelled"));
@@ -1100,5 +1103,124 @@ public partial class MainForm : Form
         public string SelectedCategoriesCsv { get; set; } = "";
         public string ConvertAssetsJson { get; set; } = "";
         public string Language { get; set; } = "";
+    }
+
+    private async Task CheckForUpdateOnStartupAsync()
+    {
+        try
+        {
+            Log("アップデートチェックを開始します...");
+            var (hasUpdate, latestVersion, downloadUrl, currentVersion, debugInfo) = await Updater.CheckForUpdateAsync();
+            
+            Log($"デバッグ情報: {debugInfo}");
+
+            if (hasUpdate && downloadUrl != null)
+            {
+                Log($"新しいバージョン {latestVersion} が見つかりました。");
+                
+                var result = MessageBox.Show(
+                    $"新しいバージョン {latestVersion} が見つかりました。\nアップデートしますか？",
+                    "アップデートの確認",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (result == DialogResult.Yes)
+                {
+                    SetStatus("アップデートをダウンロード中...", true);
+                    var progress = new Progress<int>(p =>
+                    {
+                        progressBar.Value = p;
+                    });
+
+                    var success = await Updater.DownloadAndUpdateAsync(downloadUrl, progress, CancellationToken.None);
+
+                    if (success)
+                    {
+                        Log("アップデートを開始します。アプリを終了します...");
+                        MessageBox.Show("アップデートを開始します。アプリを終了します。", "アップデート", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        Application.Exit();
+                    }
+                    else
+                    {
+                        Log("アップデートに失敗しました。");
+                        MessageBox.Show("アップデートに失敗しました。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"アップデートチェック中にエラーが発生しました: {ex.Message}");
+        }
+        finally
+        {
+            SetStatus(LanguageManager.GetString("Ready"), false);
+            SetIndeterminateProgress(false);
+            ResetProgress();
+        }
+    }
+
+    private async void MenuCheckUpdate_Click(object? sender, EventArgs e)
+    {
+        try
+        {
+            SetStatus("アップデートを確認中...", true);
+            SetIndeterminateProgress(true);
+            Log("アップデートチェックを開始します...");
+
+            var (hasUpdate, latestVersion, downloadUrl, currentVersion, debugInfo) = await Updater.CheckForUpdateAsync();
+            
+            Log($"デバッグ情報: {debugInfo}");
+
+            if (hasUpdate && downloadUrl != null)
+            {
+                Log($"新しいバージョン {latestVersion} が見つかりました。");
+                
+                var result = MessageBox.Show(
+                    $"新しいバージョン {latestVersion} が見つかりました。\nアップデートしますか？",
+                    "アップデートの確認",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (result == DialogResult.Yes)
+                {
+                    SetStatus("アップデートをダウンロード中...", true);
+                    var progress = new Progress<int>(p =>
+                    {
+                        progressBar.Value = p;
+                    });
+
+                    var success = await Updater.DownloadAndUpdateAsync(downloadUrl, progress, CancellationToken.None);
+
+                    if (success)
+                    {
+                        Log("アップデートを開始します。アプリを終了します...");
+                        MessageBox.Show("アップデートを開始します。アプリを終了します。", "アップデート", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        Application.Exit();
+                    }
+                    else
+                    {
+                        Log("アップデートに失敗しました。");
+                        MessageBox.Show("アップデートに失敗しました。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+            else
+            {
+                Log("最新バージョンです。");
+                MessageBox.Show("最新バージョンです。", "アップデートの確認", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"アップデートチェック中にエラーが発生しました: {ex.Message}");
+            MessageBox.Show("アップデートチェック中にエラーが発生しました。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            SetStatus(LanguageManager.GetString("Ready"), false);
+            SetIndeterminateProgress(false);
+            ResetProgress();
+        }
     }
 }

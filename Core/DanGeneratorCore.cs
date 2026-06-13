@@ -264,7 +264,7 @@ public class DanGeneratorCore
 
                 try
                 {
-                    int rankIdx = danIndexOverride ?? (isGaiden ? 18 : rankNames.ToList().FindIndex(r => detectedRank.Contains(r)));
+                    int rankIdx = danIndexOverride ?? (isGaiden ? 19 : rankNames.ToList().FindIndex(r => detectedRank.Contains(r)));
                     var dan = new DanCourse { title = detectedRank, danIndex = rankIdx >= 0 ? rankIdx : 0 };
                     
                     // セットの区切り判定
@@ -698,17 +698,26 @@ public class DanGeneratorCore
         string normalizedTarget = NormalizationUtils.NormalizeTitle(targetName);
         if (string.IsNullOrEmpty(normalizedTarget)) return null;
         
-        // 1. 完全一致（正規化後）
-        var match = dirs.FirstOrDefault(d => NormalizationUtils.NormalizeTitle(Path.GetFileName(d)).Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase));
-        if (match != null) return match;
-
-        // 2. 後方一致（正規化後）
-        match = dirs.FirstOrDefault(d => NormalizationUtils.NormalizeTitle(Path.GetFileName(d)).EndsWith(normalizedTarget, StringComparison.OrdinalIgnoreCase));
-        if (match != null) return match;
-
-        // 3. 部分一致（正規化後）
-        match = dirs.FirstOrDefault(d => NormalizationUtils.NormalizeTitle(Path.GetFileName(d)).Contains(normalizedTarget, StringComparison.OrdinalIgnoreCase));
-        if (match != null) return match;
+        var targetVariants = NormalizationUtils.ExpandTitleMatchKeys(normalizedTarget).ToList();
+        
+        foreach (var dir in dirs)
+        {
+            string dirName = Path.GetFileName(dir);
+            string normalizedDirName = NormalizationUtils.NormalizeTitle(dirName);
+            var dirVariants = NormalizationUtils.ExpandTitleMatchKeys(normalizedDirName).ToList();
+            
+            // 1. 完全一致（ターゲットとディレクトリのバリアントでチェック）
+            if (targetVariants.Any(tv => dirVariants.Any(dv => dv.Equals(tv, StringComparison.OrdinalIgnoreCase))))
+                return dir;
+                
+            // 2. 後方一致
+            if (targetVariants.Any(tv => dirVariants.Any(dv => dv.EndsWith(tv, StringComparison.OrdinalIgnoreCase))))
+                return dir;
+                
+            // 3. 部分一致
+            if (targetVariants.Any(tv => dirVariants.Any(dv => dv.Contains(tv, StringComparison.OrdinalIgnoreCase))))
+                return dir;
+        }
 
         return null;
     }
